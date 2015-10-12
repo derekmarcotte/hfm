@@ -1,0 +1,17 @@
+{
+	"version": 0,
+	"dependencies": [
+		{
+			"importpath": "github.com/mitchellh/go-libucl",
+			"repository": "https://github.com/mitchellh/go-libucl",
+			"revision": "8da0f346ecb82446ebceafd6e8e9d9be4d549745",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/op/go-logging",
+			"repository": "https://github.com/op/go-logging",
+			"revision": "e8d5414f0947014548c2334044a0fac13187dfee",
+			"branch": "master"
+		}
+	]
+}
