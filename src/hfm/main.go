@@ -81,8 +81,8 @@ type Rule struct {
 }
 
 type Configuration struct {
-	rules        map[string]Rule
-	ruleDefaults map[string]Rule
+	rules        map[string]*Rule
+	ruleDefaults map[string]*Rule
 }
 
 /* meat */
@@ -138,29 +138,36 @@ func walkConfiguration(uclConfig *libucl.Object, config *Configuration, parentRu
 	}
 
 	var nextDepth ConfigLevelType
-	//	tabs := 0
+	tabs := 0
+	var _ = tabs
+
+	/* all actual rules have a test, defaults do not */
 	isRule := (uclConfig.Get("test") != nil)
 
 	switch depth {
 	case ConfigLevelRoot:
 		nextDepth = ConfigLevelGroup
 	case ConfigLevelGroup:
-		//		tabs = 1
 		nextDepth = ConfigLevelRule
+		tabs = 1
 	case ConfigLevelRule:
 		if !isRule {
 			/* XXX: can only define rules at this level */
 			return
 		}
-		//		tabs = 2
+		tabs = 2
 	}
 
 	rule := Rule{name: name, groupName: parentRule}
+	if rule.name == "default" {
+		rule.interval = 1
+		rule.failInterval = rule.interval
+	}
 
 	if !isRule {
-		config.ruleDefaults[name] = rule
+		config.ruleDefaults[name] = &rule
 	}
-	config.rules[name] = rule
+	config.rules[name] = &rule
 
 	i := uclConfig.Iterate(true)
 	defer i.Close()
@@ -179,6 +186,8 @@ func walkConfiguration(uclConfig *libucl.Object, config *Configuration, parentRu
 
 			continue
 		}
+
+		//fmt.Printf("%s%+v\t%v\n", strings.Repeat("\t", tabs), c.Key(), c.Type())
 
 		switch strings.ToLower(c.Key()) {
 		case "status":
@@ -246,7 +255,7 @@ func walkConfiguration(uclConfig *libucl.Object, config *Configuration, parentRu
 
 func main() {
 	var configPath string
-	config := Configuration{rules: make(map[string]Rule), ruleDefaults: make(map[string]Rule)}
+	config := Configuration{rules: make(map[string]*Rule), ruleDefaults: make(map[string]*Rule)}
 
 	flag.StringVar(&configPath, "config", "etc/hfm.conf", "Configuration file path")
 	flag.Parse()
@@ -272,5 +281,4 @@ func main() {
 	for _, rule := range config.rules {
 		fmt.Printf("%+v\n", rule)
 	}
-
 }
