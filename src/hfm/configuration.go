@@ -2,6 +2,7 @@ package main
 
 /* stdlib includes */
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -21,25 +22,31 @@ const (
 )
 
 type Configuration struct {
+	path         string
 	rules        map[string]*Rule
 	ruleDefaults map[string]*Rule
 }
 
 /* meat */
-
-/* dependancy injection is for another day */
-func loadConfiguration(configPath string) (*libucl.Object, error) {
+func (c *Configuration) LoadConfiguration(path string) error {
 	p := libucl.NewParser(0)
 	defer p.Close()
 
-	e := p.AddFile(configPath)
+	e := p.AddFile(path)
 	if e != nil {
-		log.Error(fmt.Sprintf("Could not load configuration file %v: %+v", configPath, e))
-		return nil, e
+		return e
 	}
 
-	config := p.Object()
-	return config, nil
+	uclConfig := p.Object()
+	defer uclConfig.Close()
+
+	//fmt.Println(config.Emit(libucl.EmitConfig))
+
+	c.ruleDefaults = make(map[string]*Rule)
+	c.rules = make(map[string]*Rule)
+
+	return c.walkConfiguration(uclConfig, "", ConfigLevelRoot)
+
 }
 
 /* config format:
@@ -52,7 +59,7 @@ func loadConfiguration(configPath string) (*libucl.Object, error) {
  *  rule
  *  default
  */
-func walkConfiguration(uclConfig *libucl.Object, config *Configuration, parentRule string, depth ConfigLevelType) {
+func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentRule string, depth ConfigLevelType) error {
 	var name string
 	if depth == ConfigLevelRoot {
 		name = "default"
@@ -65,14 +72,11 @@ func walkConfiguration(uclConfig *libucl.Object, config *Configuration, parentRu
 	}
 
 	if name == "" {
-		/* XXX: push warning up the stack */
-		return
+		return errors.New("Rule is missing a name.")
 	} else if _, ok := config.rules[name]; ok {
-		/* XXX: if name has already been assigned push warning up the stack */
-		return
+		return errors.New(fmt.Sprintf("%s: name has been used already", name))
 	} else if _, ok := config.ruleDefaults[name]; ok {
-		/* XXX: if name has already been assigned push warning up the stack */
-		return
+		return errors.New(fmt.Sprintf("%s: name has been used by a group already", name))
 	}
 
 	var nextDepth ConfigLevelType
@@ -90,8 +94,7 @@ func walkConfiguration(uclConfig *libucl.Object, config *Configuration, parentRu
 		tabs = 1
 	case ConfigLevelRule:
 		if !isRule {
-			/* XXX: can only define rules at this level */
-			return
+			return errors.New(fmt.Sprintf("%s: a 'test' value must exist for rules", name))
 		}
 		tabs = 2
 	}
@@ -117,9 +120,9 @@ func walkConfiguration(uclConfig *libucl.Object, config *Configuration, parentRu
 			/* if we are a rule, we stop parsing children */
 			if depth != ConfigLevelRule || !isRule {
 				//fmt.Printf("%s%v: \n", strings.Repeat("\t", tabs), c.Key())
-				walkConfiguration(c, config, name, nextDepth)
+				config.walkConfiguration(c, name, nextDepth)
 			} else {
-				/* XXX: push warning up the stack */
+				return errors.New(fmt.Sprintf("%s: rules cannot contain child rules", name))
 			}
 
 			continue
@@ -130,7 +133,7 @@ func walkConfiguration(uclConfig *libucl.Object, config *Configuration, parentRu
 		switch strings.ToLower(c.Key()) {
 		case "status":
 			if c.Type() != libucl.ObjectTypeString {
-				/* XXX: push warning up the stack */
+				return errors.New(fmt.Sprintf("%s: 'status' must be a string type", name))
 			}
 
 			switch strings.ToLower(c.ToString()) {
@@ -149,44 +152,43 @@ func walkConfiguration(uclConfig *libucl.Object, config *Configuration, parentRu
 			case "always-success":
 				rule.status = RuleStatusAlwaysSuccess
 			default:
-				/* XXX: push warning up the stack */
+				return errors.New(fmt.Sprintf("%s: 'status' does not contain a valid string", name))
 			}
 		case "interval":
 			switch c.Type() {
 			case libucl.ObjectTypeInt, libucl.ObjectTypeFloat, libucl.ObjectTypeTime:
 				rule.interval = c.ToFloat()
 			default:
-				/* XXX: push warning up the stack */
+				return errors.New(fmt.Sprintf("%s: 'interval' must be a valid numeric type", name))
 			}
 		case "fail_interval":
 			switch c.Type() {
 			case libucl.ObjectTypeInt, libucl.ObjectTypeFloat, libucl.ObjectTypeTime:
 				rule.interval = c.ToFloat()
 			default:
-				/* XXX: push warning up the stack */
+				return errors.New(fmt.Sprintf("%s: 'fail_interval' must be a valid numeric type", name))
 			}
 		case "test":
 			if c.Type() != libucl.ObjectTypeString {
-				/* XXX: push warning up the stack */
+				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, c.Key()))
 			}
 			rule.test = c.ToString()
 		case "change_fail":
 			if c.Type() != libucl.ObjectTypeString {
-				/* XXX: push warning up the stack */
+				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, c.Key()))
 			}
 			rule.changeFail = c.ToString()
 		case "change_success":
 			if c.Type() != libucl.ObjectTypeString {
-				/* XXX: push warning up the stack */
+				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, c.Key()))
 			}
 			rule.changeSuccess = c.ToString()
 		default:
 			//fmt.Printf("%s%+v\n", strings.Repeat("\t", tabs), c)
-			/* XXX: push warning up the stack */
+			return errors.New(fmt.Sprintf("%s: '%s' unrecognized property", name, c.Key()))
 		}
 	}
 
 	//fmt.Printf("%s%+v\n", strings.Repeat("\t", tabs), rule)
-
-	return
+	return nil
 }
