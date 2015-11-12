@@ -13,7 +13,8 @@ const (
 type RuleStatusType int
 
 const (
-	RuleStatusEnabled RuleStatusType = iota
+	RuleStatusUnset RuleStatusType = iota
+	RuleStatusEnabled
 	/* a disabled service leaves the run-time configuration */
 	RuleStatusDisabled
 
@@ -43,7 +44,14 @@ type Rule struct {
 	interval float64
 
 	/* what is the period between scheduled runs on previously failed rules */
-	failInterval float64
+	intervalFail float64
+
+	/* what is the period this task can run for, before killing it */
+	timeoutInt  float64
+	timeoutKill float64
+
+	/* shell to execute commands in */
+	shell string
 
 	/* shell command to run to initiate test */
 	/*  hoping to extend to support go-native tests */

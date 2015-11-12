@@ -23,8 +23,10 @@ const (
 
 type Configuration struct {
 	path         string
+	shell        string
 	rules        map[string]*Rule
 	ruleDefaults map[string]*Rule
+
 }
 
 /* meat */
@@ -42,11 +44,14 @@ func (c *Configuration) LoadConfiguration(path string) error {
 
 	//fmt.Println(config.Emit(libucl.EmitConfig))
 
-	c.ruleDefaults = make(map[string]*Rule)
-	c.rules = make(map[string]*Rule)
+	e = c.walkConfiguration(uclConfig, "", ConfigLevelRoot)
+	if e != nil {
+		return e
+	}
 
-	return c.walkConfiguration(uclConfig, "", ConfigLevelRoot)
+	c.resolveDefaults()
 
+	return nil
 }
 
 /* config format:
@@ -63,6 +68,8 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 	var name string
 	if depth == ConfigLevelRoot {
 		name = "default"
+		config.ruleDefaults = make(map[string]*Rule)
+		config.rules = make(map[string]*Rule)
 	} else {
 		if parentRule == "default" {
 			name = uclConfig.Key()
@@ -101,20 +108,24 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 
 	rule := Rule{name: name, groupName: parentRule}
 	if rule.name == "default" {
-		rule.interval = 1
-		rule.failInterval = rule.interval
+		rule.interval = 1 
+		rule.timeoutInt = 1 
+		rule.status = RuleStatusEnabled
+		rule.shell = "/bin/sh"
 	}
 
 	if !isRule {
 		config.ruleDefaults[name] = &rule
+	} else {
+		config.rules[name] = &rule
 	}
-	config.rules[name] = &rule
 
 	i := uclConfig.Iterate(true)
 	defer i.Close()
 
 	for c := i.Next(); c != nil; c = i.Next() {
 		defer c.Close()
+		field := strings.ToLower(c.Key())
 
 		if c.Type() == libucl.ObjectTypeObject {
 			/* if we are a rule, we stop parsing children */
@@ -122,7 +133,7 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 				//fmt.Printf("%s%v: \n", strings.Repeat("\t", tabs), c.Key())
 				config.walkConfiguration(c, name, nextDepth)
 			} else {
-				return errors.New(fmt.Sprintf("%s: rules cannot contain child rules", name))
+				return errors.New(fmt.Sprintf("%s: '%s' rules cannot contain child rules", name, field))
 			}
 
 			continue
@@ -130,10 +141,16 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 
 		//fmt.Printf("%s%+v\t%v\n", strings.Repeat("\t", tabs), c.Key(), c.Type())
 
-		switch strings.ToLower(c.Key()) {
+		switch field {
+		case "shell":
+			if c.Type() != libucl.ObjectTypeString {
+				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, field))
+			}
+
+			rule.shell = c.ToString()
 		case "status":
 			if c.Type() != libucl.ObjectTypeString {
-				return errors.New(fmt.Sprintf("%s: 'status' must be a string type", name))
+				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, field))
 			}
 
 			switch strings.ToLower(c.ToString()) {
@@ -152,35 +169,35 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 			case "always-success":
 				rule.status = RuleStatusAlwaysSuccess
 			default:
-				return errors.New(fmt.Sprintf("%s: 'status' does not contain a valid string", name))
+				return errors.New(fmt.Sprintf("%s: '%s' does not contain a valid string", name, field))
 			}
 		case "interval":
 			switch c.Type() {
 			case libucl.ObjectTypeInt, libucl.ObjectTypeFloat, libucl.ObjectTypeTime:
 				rule.interval = c.ToFloat()
 			default:
-				return errors.New(fmt.Sprintf("%s: 'interval' must be a valid numeric type", name))
+				return errors.New(fmt.Sprintf("%s: '%s' must be a valid numeric type", name, field))
 			}
 		case "fail_interval":
 			switch c.Type() {
 			case libucl.ObjectTypeInt, libucl.ObjectTypeFloat, libucl.ObjectTypeTime:
-				rule.interval = c.ToFloat()
+				rule.intervalFail = c.ToFloat()
 			default:
-				return errors.New(fmt.Sprintf("%s: 'fail_interval' must be a valid numeric type", name))
+				return errors.New(fmt.Sprintf("%s: '%s' must be a valid numeric type", name, field))
 			}
 		case "test":
 			if c.Type() != libucl.ObjectTypeString {
-				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, c.Key()))
+				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, field))
 			}
 			rule.test = c.ToString()
 		case "change_fail":
 			if c.Type() != libucl.ObjectTypeString {
-				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, c.Key()))
+				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, field))
 			}
 			rule.changeFail = c.ToString()
 		case "change_success":
 			if c.Type() != libucl.ObjectTypeString {
-				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, c.Key()))
+				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, field))
 			}
 			rule.changeSuccess = c.ToString()
 		default:
@@ -191,4 +208,41 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 
 	//fmt.Printf("%s%+v\n", strings.Repeat("\t", tabs), rule)
 	return nil
+}
+
+func (c *Configuration) resolveDefaults() {
+	for _, rule := range c.rules {
+		if g, ok := c.ruleDefaults[rule.name]; ok {
+			if r, ok := c.ruleDefaults[g.groupName]; ok {
+				// map the root/default rules before applying the
+				// group rules
+				c.mapDefaults(rule, *r)
+			}
+			c.mapDefaults(rule, *g)
+		}
+
+		if rule.intervalFail == 0 {
+			rule.intervalFail = rule.interval
+		}
+
+		if rule.timeoutKill == 0 {
+			// 3 is totally arbitrary
+			rule.timeoutKill = rule.timeoutInt + 3
+		}
+	}
+	c.ruleDefaults = nil
+}
+
+func (c *Configuration) mapDefaults(dst *Rule, src Rule) {
+	if dst.status == RuleStatusUnset {
+		dst.status = src.status
+	}
+
+	if dst.interval == 0 {
+		dst.interval = src.interval
+	}
+
+	if dst.intervalFail == 0 {
+		dst.intervalFail = src.intervalFail
+	}
 }
