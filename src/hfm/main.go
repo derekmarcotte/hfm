@@ -52,8 +52,7 @@ func main() {
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
 
-			cmd := exec.Command(rule.shell)
-			stdin, _ := cmd.StdinPipe()
+			cmd := exec.Command(rule.shell, "-c", rule.test)
 
 			cmd.Stdout = &stdout
 			cmd.Stderr = &stderr
@@ -71,9 +70,6 @@ func main() {
 			go func() {
 				cmdDone <- cmd.Wait()
 			}()
-
-			stdin.Write([]byte(rule.test))
-			stdin.Close()
 
 			var interrupted = false
 			var killed = false
