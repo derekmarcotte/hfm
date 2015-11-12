@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"reflect"
 	"runtime"
 	"syscall"
 	"time"
@@ -71,58 +72,41 @@ func main() {
 				cmdDone <- cmd.Wait()
 			}()
 
-			var interrupted = false
-			var killed = false
+			// the code isnt't very readale otherwise
+			timeoutInt := time.Duration(rule.timeoutInt * float64(time.Second))
+			timeoutKill := time.Duration(rule.timeoutKill * float64(time.Second))
 
-		loop:
-			for {
+			cases := make([]reflect.SelectCase, 3)
+			cases[0] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(cmdDone)}
+			cases[1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(timeoutKill))}
+			cases[2] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(timeoutInt))}
 
-				if killed {
-					select {
-					case err := <-cmdDone:
-						if err != nil {
-							log.Error("'%s' completed with error: %v", rule.name, err)
-						}
-						break loop
-					}
-				} else if interrupted {
-					select {
-					case <-time.After(time.Duration(rule.timeoutKill * float64(time.Second))):
-						log.Warning("'%s' kill timeout exceeded, issuing kill.", rule.name)
-						if err := cmd.Process.Kill(); err != nil {
-							log.Error("'%s' failed to kill test process: %v", rule.name, err)
-						}
-						killed = true
-					case err := <-cmdDone:
-						if err != nil {
-							log.Error("'%s' completed with error: %v", rule.name, err)
-						}
-						break loop
-					}
-				} else {
-					/* we wish to drain the cmdDone channel, should
-					 * a signal be sent to the process
-					 */
-					select {
-					case <-time.After(time.Duration(rule.timeoutInt * float64(time.Second))):
-						log.Info("'%s' interrupt timeout exceeded, issuing interrupt.", rule.name)
-						if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
-							log.Error("'%s' failed to interrupt test process: %v", rule.name, err)
-						}
-						interrupted = true
-					case <-time.After(time.Duration(rule.timeoutKill * float64(time.Second))):
-						log.Warning("'%s' kill timeout exceeded, issuing kill.", rule.name)
-						if err := cmd.Process.Kill(); err != nil {
-							log.Error("'%s' failed to kill test process: %v", rule.name, err)
-						}
-						killed = true
-					case err := <-cmdDone:
-						if err != nil {
-							log.Error("'%s' completed with error: %v", rule.name, err)
-						}
+			for len(cases) > 0 {
+				i, value, _ := reflect.Select(cases)
 
-						break loop
+				switch i {
+				case 0:
+					err := value.Interface()
+					if err != nil {
+						log.Error("'%s' completed with error: %v", rule.name, err)
 					}
+				case 1:
+					log.Warning("'%s' kill timeout exceeded, issuing kill.", rule.name)
+					if err := cmd.Process.Kill(); err != nil {
+						log.Error("'%s' failed to kill test process: %v", rule.name, err)
+					}
+				case 2:
+					log.Info("'%s' interrupt timeout exceeded, issuing interrupt.", rule.name)
+					if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
+						log.Error("'%s' failed to interrupt test process: %v", rule.name, err)
+					}
+				}
+
+				switch i {
+				case 0:
+					cases = nil
+				case 1, 2:
+					cases = cases[:i]
 				}
 			}
 
