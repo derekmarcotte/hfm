@@ -24,18 +24,16 @@ const (
 type Configuration struct {
 	path         string
 	shell        string
-	rules        map[string]*Rule
+	Rules        map[string]*Rule
 	ruleDefaults map[string]*Rule
-
 }
 
 /* meat */
-func (c *Configuration) LoadConfiguration(path string) error {
+func (c *Configuration) SetConfiguration(config string) error {
 	p := libucl.NewParser(0)
 	defer p.Close()
 
-	e := p.AddFile(path)
-	if e != nil {
+	if e := p.AddString(config); e != nil {
 		return e
 	}
 
@@ -43,9 +41,28 @@ func (c *Configuration) LoadConfiguration(path string) error {
 	defer uclConfig.Close()
 
 	//fmt.Println(config.Emit(libucl.EmitConfig))
+	if e := c.walkConfiguration(uclConfig, "", ConfigLevelRoot); e != nil {
+		return e
+	}
 
-	e = c.walkConfiguration(uclConfig, "", ConfigLevelRoot)
-	if e != nil {
+	c.resolveDefaults()
+
+	return nil
+}
+
+func (c *Configuration) LoadConfiguration(path string) error {
+	p := libucl.NewParser(0)
+	defer p.Close()
+
+	if e := p.AddFile(path); e != nil {
+		return e
+	}
+
+	uclConfig := p.Object()
+	defer uclConfig.Close()
+
+	//fmt.Println(config.Emit(libucl.EmitConfig))
+	if e := c.walkConfiguration(uclConfig, "", ConfigLevelRoot); e != nil {
 		return e
 	}
 
@@ -69,7 +86,7 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 	if depth == ConfigLevelRoot {
 		name = "default"
 		config.ruleDefaults = make(map[string]*Rule)
-		config.rules = make(map[string]*Rule)
+		config.Rules = make(map[string]*Rule)
 	} else {
 		if parentRule == "default" {
 			name = uclConfig.Key()
@@ -80,7 +97,7 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 
 	if name == "" {
 		return errors.New("Rule is missing a name.")
-	} else if _, ok := config.rules[name]; ok {
+	} else if _, ok := config.Rules[name]; ok {
 		return errors.New(fmt.Sprintf("%s: name has been used already", name))
 	} else if _, ok := config.ruleDefaults[name]; ok {
 		return errors.New(fmt.Sprintf("%s: name has been used by a group already", name))
@@ -108,8 +125,8 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 
 	rule := Rule{name: name, groupName: parentRule}
 	if rule.name == "default" {
-		rule.interval = 1 
-		rule.timeoutInt = 1 
+		rule.interval = 1
+		rule.timeoutInt = 1
 		rule.status = RuleStatusEnabled
 		rule.shell = "/bin/sh"
 	}
@@ -117,7 +134,7 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 	if !isRule {
 		config.ruleDefaults[name] = &rule
 	} else {
-		config.rules[name] = &rule
+		config.Rules[name] = &rule
 	}
 
 	i := uclConfig.Iterate(true)
@@ -185,6 +202,20 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 			default:
 				return errors.New(fmt.Sprintf("%s: '%s' must be a valid numeric type", name, field))
 			}
+		case "timeout_int":
+			switch c.Type() {
+			case libucl.ObjectTypeInt, libucl.ObjectTypeFloat, libucl.ObjectTypeTime:
+				rule.timeoutInt = c.ToFloat()
+			default:
+				return errors.New(fmt.Sprintf("%s: '%s' must be a valid numeric type", name, field))
+			}
+		case "timeout_kill":
+			switch c.Type() {
+			case libucl.ObjectTypeInt, libucl.ObjectTypeFloat, libucl.ObjectTypeTime:
+				rule.timeoutKill = c.ToFloat()
+			default:
+				return errors.New(fmt.Sprintf("%s: '%s' must be a valid numeric type", name, field))
+			}
 		case "test":
 			if c.Type() != libucl.ObjectTypeString {
 				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, field))
@@ -211,14 +242,15 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 }
 
 func (c *Configuration) resolveDefaults() {
-	for _, rule := range c.rules {
-		if g, ok := c.ruleDefaults[rule.name]; ok {
-			if r, ok := c.ruleDefaults[g.groupName]; ok {
+	for _, rule := range c.Rules {
+		if g, ok := c.ruleDefaults[rule.groupName]; ok {
+			c.mapDefaults(rule, *g)
+
+			if d, ok := c.ruleDefaults[g.groupName]; ok {
 				// map the root/default rules before applying the
 				// group rules
-				c.mapDefaults(rule, *r)
+				c.mapDefaults(rule, *d)
 			}
-			c.mapDefaults(rule, *g)
 		}
 
 		if rule.intervalFail == 0 {
@@ -238,11 +270,19 @@ func (c *Configuration) mapDefaults(dst *Rule, src Rule) {
 		dst.status = src.status
 	}
 
+	if dst.shell == "" {
+		dst.shell = src.shell
+	}
+
 	if dst.interval == 0 {
 		dst.interval = src.interval
 	}
 
 	if dst.intervalFail == 0 {
 		dst.intervalFail = src.intervalFail
+	}
+
+	if dst.timeoutInt == 0 {
+		dst.timeoutInt = src.timeoutInt
 	}
 }
