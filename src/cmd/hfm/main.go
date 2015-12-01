@@ -12,11 +12,6 @@ import "github.com/op/go-logging"
 
 /* definitions */
 
-type LogMessage struct {
-	level   logging.Level
-	message string
-}
-
 /* meat */
 /* dependancy injection is for another day */
 var log = logging.MustGetLogger(os.Args[0])
@@ -34,7 +29,6 @@ func main() {
 	}
 
 	ruleDone := make(chan *RuleDriver)
-	logMsg := make(chan LogMessage)
 
 	log.Info("Loaded %d rules.", len(config.Rules))
 	log.Debug("%d goroutines - before main dispatch loop.", runtime.NumGoroutine())
@@ -44,19 +38,14 @@ func main() {
 
 		// driver gets its own copy of the rule, safe from
 		// side effects later
-		driver := RuleDriver{Rule: *rule, Done: ruleDone, Log: logMsg}
+		driver := RuleDriver{Rule: *rule, Done: ruleDone}
 		go driver.Run()
 	}
 	log.Debug("%d goroutines - after dispatch loop.", runtime.NumGoroutine())
 
-	for i := 0; i < len(config.Rules); {
-		select {
-		case msg := <-logMsg:
-			log.log(logMsg.level, logMsg.message)
-		case driver := <-ruleDone:
-			log.Info("'%s' completed execution.  Ran for: %v\n\n", driver.Rule.name, driver.LastExecDuration)
-			i++
-		}
+	for i := 0; i < len(config.Rules); i++ {
+		driver := <-ruleDone
+		log.Info("'%s' completed execution.  Ran for: %v\n\n", driver.Rule.name, driver.LastExecDuration)
 	}
 
 	log.Debug("%d goroutines - at the end.", runtime.NumGoroutine())

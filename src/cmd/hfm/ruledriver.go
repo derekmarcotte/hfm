@@ -3,7 +3,6 @@ package main
 /* stdlib includes */
 import (
 	"bytes"
-	"fmt"
 	"os/exec"
 	"reflect"
 	"syscall"
@@ -13,7 +12,6 @@ import (
 type RuleDriver struct {
 	Rule             Rule
 	Done             chan *RuleDriver
-	Log              chan LogMessage
 	LastExecDuration time.Duration
 	LastError        error
 }
@@ -31,7 +29,7 @@ func (rd *RuleDriver) Run() {
 	for rd.Rule.status != RuleStatusDisabled {
 		start := time.Now()
 
-		rd.Log <- LogMessage{logging.DEBUG, fmt.Sprintf("'%s' starting at %v...", rd.Rule.name, start)}
+		log.Debug("'%s' starting at %v...", rd.Rule.name, start)
 
 		stdout.Reset()
 		stderr.Reset()
