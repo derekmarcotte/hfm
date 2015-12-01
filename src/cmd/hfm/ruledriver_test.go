@@ -2,8 +2,12 @@ package main
 
 import "testing"
 
-//import "reflect"
-//import "errors"
+/* tightly coupled to the the logging interface ! */
+import "github.com/op/go-logging"
+
+func init() {
+	log.SetBackend(logging.AddModuleLevel(logging.InitForTesting(logging.NOTICE)))
+}
 
 func TestStatusRunOnce(t *testing.T) {
 	var c Configuration
