@@ -123,12 +123,12 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 		tabs = 2
 	}
 
-	rule := Rule{name: name, groupName: parentRule}
-	if rule.name == "default" {
-		rule.interval = 1
-		rule.timeoutInt = 1
-		rule.status = RuleStatusEnabled
-		rule.shell = "/bin/sh"
+	rule := Rule{Name: name, GroupName: parentRule}
+	if rule.Name == "default" {
+		rule.Interval = 1
+		rule.TimeoutInt = 1
+		rule.Status = RuleStatusEnabled
+		rule.Shell = "/bin/sh"
 	}
 
 	if !isRule {
@@ -164,7 +164,7 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, field))
 			}
 
-			rule.shell = c.ToString()
+			rule.Shell = c.ToString()
 		case "status":
 			if c.Type() != libucl.ObjectTypeString {
 				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, field))
@@ -172,47 +172,47 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 
 			switch strings.ToLower(c.ToString()) {
 			case "enabled":
-				rule.status = RuleStatusEnabled
+				rule.Status = RuleStatusEnabled
 			case "disabled":
-				rule.status = RuleStatusDisabled
+				rule.Status = RuleStatusDisabled
 			case "run-once":
-				rule.status = RuleStatusRunOnce
+				rule.Status = RuleStatusRunOnce
 			case "run-once-fail":
-				rule.status = RuleStatusRunOnceFail
+				rule.Status = RuleStatusRunOnceFail
 			case "run-once-sucess":
-				rule.status = RuleStatusRunOnceSuccess
+				rule.Status = RuleStatusRunOnceSuccess
 			case "always-fail":
-				rule.status = RuleStatusAlwaysFail
+				rule.Status = RuleStatusAlwaysFail
 			case "always-success":
-				rule.status = RuleStatusAlwaysSuccess
+				rule.Status = RuleStatusAlwaysSuccess
 			default:
 				return errors.New(fmt.Sprintf("%s: '%s' does not contain a valid string", name, field))
 			}
 		case "interval":
 			switch c.Type() {
 			case libucl.ObjectTypeInt, libucl.ObjectTypeFloat, libucl.ObjectTypeTime:
-				rule.interval = c.ToFloat()
+				rule.Interval = c.ToFloat()
 			default:
 				return errors.New(fmt.Sprintf("%s: '%s' must be a valid numeric type", name, field))
 			}
 		case "fail_interval":
 			switch c.Type() {
 			case libucl.ObjectTypeInt, libucl.ObjectTypeFloat, libucl.ObjectTypeTime:
-				rule.intervalFail = c.ToFloat()
+				rule.IntervalFail = c.ToFloat()
 			default:
 				return errors.New(fmt.Sprintf("%s: '%s' must be a valid numeric type", name, field))
 			}
 		case "timeout_int":
 			switch c.Type() {
 			case libucl.ObjectTypeInt, libucl.ObjectTypeFloat, libucl.ObjectTypeTime:
-				rule.timeoutInt = c.ToFloat()
+				rule.TimeoutInt = c.ToFloat()
 			default:
 				return errors.New(fmt.Sprintf("%s: '%s' must be a valid numeric type", name, field))
 			}
 		case "timeout_kill":
 			switch c.Type() {
 			case libucl.ObjectTypeInt, libucl.ObjectTypeFloat, libucl.ObjectTypeTime:
-				rule.timeoutKill = c.ToFloat()
+				rule.TimeoutKill = c.ToFloat()
 			default:
 				return errors.New(fmt.Sprintf("%s: '%s' must be a valid numeric type", name, field))
 			}
@@ -220,17 +220,17 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 			if c.Type() != libucl.ObjectTypeString {
 				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, field))
 			}
-			rule.test = c.ToString()
+			rule.Test = c.ToString()
 		case "change_fail":
 			if c.Type() != libucl.ObjectTypeString {
 				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, field))
 			}
-			rule.changeFail = c.ToString()
+			rule.ChangeFail = c.ToString()
 		case "change_success":
 			if c.Type() != libucl.ObjectTypeString {
 				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, field))
 			}
-			rule.changeSuccess = c.ToString()
+			rule.ChangeSuccess = c.ToString()
 		default:
 			//fmt.Printf("%s%+v\n", strings.Repeat("\t", tabs), c)
 			return errors.New(fmt.Sprintf("%s: '%s' unrecognized property", name, c.Key()))
@@ -243,46 +243,46 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 
 func (c *Configuration) resolveDefaults() {
 	for _, rule := range c.Rules {
-		if g, ok := c.ruleDefaults[rule.groupName]; ok {
+		if g, ok := c.ruleDefaults[rule.GroupName]; ok {
 			c.mapDefaults(rule, *g)
 
-			if d, ok := c.ruleDefaults[g.groupName]; ok {
+			if d, ok := c.ruleDefaults[g.GroupName]; ok {
 				// map the root/default rules before applying the
 				// group rules
 				c.mapDefaults(rule, *d)
 			}
 		}
 
-		if rule.intervalFail == 0 {
-			rule.intervalFail = rule.interval
+		if rule.IntervalFail == 0 {
+			rule.IntervalFail = rule.Interval
 		}
 
-		if rule.timeoutKill == 0 {
+		if rule.TimeoutKill == 0 {
 			// 3 is totally arbitrary
-			rule.timeoutKill = rule.timeoutInt + 3
+			rule.TimeoutKill = rule.TimeoutInt + 3
 		}
 	}
 	c.ruleDefaults = nil
 }
 
 func (c *Configuration) mapDefaults(dst *Rule, src Rule) {
-	if dst.status == RuleStatusUnset {
-		dst.status = src.status
+	if dst.Status == RuleStatusUnset {
+		dst.Status = src.Status
 	}
 
-	if dst.shell == "" {
-		dst.shell = src.shell
+	if dst.Shell == "" {
+		dst.Shell = src.Shell
 	}
 
-	if dst.interval == 0 {
-		dst.interval = src.interval
+	if dst.Interval == 0 {
+		dst.Interval = src.Interval
 	}
 
-	if dst.intervalFail == 0 {
-		dst.intervalFail = src.intervalFail
+	if dst.IntervalFail == 0 {
+		dst.IntervalFail = src.IntervalFail
 	}
 
-	if dst.timeoutInt == 0 {
-		dst.timeoutInt = src.timeoutInt
+	if dst.TimeoutInt == 0 {
+		dst.TimeoutInt = src.TimeoutInt
 	}
 }

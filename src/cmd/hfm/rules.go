@@ -32,37 +32,37 @@ const (
 
 type Rule struct {
 	/* name of the grouping for the rule */
-	groupName string
+	GroupName string
 
 	/* name of the rule in the grouping */
-	name string
+	Name string
 
 	/* what is the status of this rule */
-	status RuleStatusType
+	Status RuleStatusType
 
 	/* what is the period between scheduled runs */
-	interval float64
+	Interval float64
 
 	/* what is the period between scheduled runs on previously failed rules */
-	intervalFail float64
+	IntervalFail float64
 
 	/* what is the period this task can run for, before killing it */
-	timeoutInt  float64
-	timeoutKill float64
+	TimeoutInt  float64
+	TimeoutKill float64
 
 	/* shell to execute commands in */
-	shell string
+	Shell string
 
 	/* shell command to run to initiate test */
 	/*  hoping to extend to support go-native tests */
-	test string
+	Test string
 
 	/* shell command to run when the state changes to failed */
-	changeFail string
+	ChangeFail string
 
 	/* shell command to run when the state changes to success */
-	changeSuccess string
+	ChangeSuccess string
 
 	/* the result of the last rule check */
-	lastState RuleStateType
+	LastState RuleStateType
 }

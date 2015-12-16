@@ -33,8 +33,8 @@ func main() {
 	log.Info("Loaded %d rules.", len(config.Rules))
 	log.Debug("%d goroutines - before main dispatch loop.", runtime.NumGoroutine())
 	for _, rule := range config.Rules {
-		log.Debug("Dispatching rule '%s'", rule.name)
-		log.Debug("%s details: %+v", rule.name, rule)
+		log.Debug("Dispatching rule '%s'", rule.Name)
+		log.Debug("%s details: %+v", rule.Name, rule)
 
 		// driver gets its own copy of the rule, safe from
 		// side effects later
@@ -45,7 +45,7 @@ func main() {
 
 	for i := 0; i < len(config.Rules); i++ {
 		driver := <-ruleDone
-		log.Info("'%s' completed execution.  Ran for: %v\n\n", driver.Rule.name, driver.LastExecDuration)
+		log.Info("'%s' completed execution.  Ran for: %v\n\n", driver.Rule.Name, driver.Last.ExecDuration)
 	}
 
 	log.Debug("%d goroutines - at the end.", runtime.NumGoroutine())

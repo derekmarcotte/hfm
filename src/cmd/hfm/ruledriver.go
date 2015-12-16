@@ -9,11 +9,111 @@ import (
 	"time"
 )
 
+type ExitRecord struct {
+	ExecDuration time.Duration
+	Error        error
+	ExitStatus   int
+}
+
 type RuleDriver struct {
-	Rule             Rule
-	Done             chan *RuleDriver
-	LastExecDuration time.Duration
-	LastError        error
+	Rule Rule
+	Done chan *RuleDriver
+	Last ExitRecord
+}
+
+func (rd *RuleDriver) resetLast() {
+	rd.Last.ExecDuration = 0
+	rd.Last.Error = nil
+	rd.Last.ExitStatus = 0
+}
+
+func (rd *RuleDriver) handleCmdDone(value reflect.Value) {
+	err := value.Interface()
+	if err != nil {
+		log.Error("'%s' completed with error: %v", rd.Rule.Name, err)
+
+		ee := err.(*exec.ExitError)
+		rd.Last.Error = ee
+
+		if ws, ok := ee.Sys().(syscall.WaitStatus); ok {
+			rd.Last.ExitStatus = ws.ExitStatus()
+		}
+	}
+}
+
+func (rd *RuleDriver) handleCmdIntTimeout(cmd *exec.Cmd) {
+	log.Info("'%s' interrupt timeout exceeded, issuing interrupt.", rd.Rule.Name)
+	if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
+		log.Error("'%s' failed to interrupt test process: %v, disabling further checks", rd.Rule.Name, err)
+		rd.Rule.Status = RuleStatusDisabled
+	}
+}
+
+func (rd *RuleDriver) handleCmdKillTimeout(cmd *exec.Cmd) {
+	log.Warning("'%s' kill timeout exceeded, issuing kill.", rd.Rule.Name)
+	if err := cmd.Process.Kill(); err != nil {
+		log.Error("'%s' failed to kill test process: %v, disabling further checks", rd.Rule.Name, err)
+		rd.Rule.Status = RuleStatusDisabled
+	}
+}
+
+/* process any output produced by the command, get buffers ready for next run */
+func (rd *RuleDriver) handleCmdBuffers(stdout *bytes.Buffer, stderr *bytes.Buffer) {
+	if stdout.Len() > 0 {
+		log.Info("'%s' produced output: %v", rd.Rule.Name, stdout.String())
+	}
+	stdout.Reset()
+
+	if stderr.Len() > 0 {
+		log.Error("'%s' produced error output: %v", rd.Rule.Name, stderr.String())
+	}
+	stderr.Reset()
+}
+
+func (rd *RuleDriver) handleStateChange(newState RuleStateType) {
+	log.Warning("'%s' changed state to: %v", rd.Rule.Name, newState)
+	rd.Rule.LastState = newState
+
+	var changeCmd string
+	if newState == RuleStateSuccess {
+		changeCmd = rd.Rule.ChangeSuccess
+	} else {
+		changeCmd = rd.Rule.ChangeFail
+	}
+
+	if changeCmd == "" {
+		return
+	}
+
+	/* XXX: may never return, oooooooo */
+	cmd := exec.Command(rd.Rule.Shell, "-c", changeCmd)
+	go cmd.Run()
+}
+
+/* update the state of the rule if required, take action if state or status
+ * requires it
+ */
+func (rd *RuleDriver) updateRuleState() {
+	newState := RuleStateSuccess
+	switch {
+	case rd.Last.Error != nil, rd.Last.ExitStatus != 0, rd.Rule.Status == RuleStatusRunOnceFail, rd.Rule.Status == RuleStatusAlwaysFail:
+		if rd.Rule.Status != RuleStatusAlwaysSuccess {
+			newState = RuleStateFail
+		}
+	}
+
+	/* if the state has changed, or is an Always */
+	switch {
+	case rd.Rule.LastState != newState, rd.Rule.Status == RuleStatusAlwaysFail, rd.Rule.Status == RuleStatusAlwaysSuccess:
+		rd.handleStateChange(newState)
+	}
+}
+
+func (rd *RuleDriver) updateRuleStatus() {
+	switch rd.Rule.Status {
+	case RuleStatusRunOnce, RuleStatusRunOnceFail, RuleStatusRunOnceSuccess:
+		rd.Rule.Status = RuleStatusDisabled
+	}
 }
 
 func (rd *RuleDriver) Run() {
@@ -23,18 +123,16 @@ func (rd *RuleDriver) Run() {
 	cmdDone := make(chan error)
 
 	// the code isnt't very readale otherwise
-	timeoutInt := time.Duration(rd.Rule.timeoutInt * float64(time.Second))
-	timeoutKill := time.Duration(rd.Rule.timeoutKill * float64(time.Second))
+	timeoutInt := time.Duration(rd.Rule.TimeoutInt * float64(time.Second))
+	timeoutKill := time.Duration(rd.Rule.TimeoutKill * float64(time.Second))
 
-	for rd.Rule.status != RuleStatusDisabled {
+	for rd.Rule.Status != RuleStatusDisabled {
 		start := time.Now()
+		log.Debug("'%s' starting at %v...", rd.Rule.Name, start)
 
-		log.Debug("'%s' starting at %v...", rd.Rule.name, start)
+		rd.resetLast()
 
-		stdout.Reset()
-		stderr.Reset()
-
-		cmd := exec.Command(rd.Rule.shell, "-c", rd.Rule.test)
+		cmd := exec.Command(rd.Rule.Shell, "-c", rd.Rule.Test)
 
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
@@ -45,7 +143,7 @@ func (rd *RuleDriver) Run() {
 		cases[2] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(timeoutInt))}
 
 		if err := cmd.Start(); err != nil {
-			log.Error("'%s' failed to start: %v", rd.Rule.name, err)
+			log.Error("'%s' failed to start: %v", rd.Rule.Name, err)
 			rd.Done <- rd
 			return
 		}
@@ -54,34 +152,21 @@ func (rd *RuleDriver) Run() {
 			cmdDone <- cmd.Wait()
 		}()
 
+		/* while we still are expecting events to listen to */
 		for len(cases) > 0 {
 			i, value, _ := reflect.Select(cases)
 
 			switch i {
 			case 0:
-				err := value.Interface()
-				if err != nil {
-					log.Error("'%s' completed with error: %v", rd.Rule.name, err)
-					if _, ok := err.(error); !ok {
-						rd.LastError = err.(error)
-					}
-				}
+				rd.handleCmdDone(value)
 			case 1:
-				log.Warning("'%s' kill timeout exceeded, issuing kill.", rd.Rule.name)
-				if err := cmd.Process.Kill(); err != nil {
-					log.Error("'%s' failed to kill test process: %v, disabling further checks", rd.Rule.name, err)
-					rd.Rule.status = RuleStatusDisabled
-				}
+				rd.handleCmdKillTimeout(cmd)
 			case 2:
-				log.Info("'%s' interrupt timeout exceeded, issuing interrupt.", rd.Rule.name)
-				if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
-					log.Error("'%s' failed to interrupt test process: %v, disabling further checks", rd.Rule.name, err)
-					rd.Rule.status = RuleStatusDisabled
-				}
+				rd.handleCmdIntTimeout(cmd)
 			}
 
 			/* each of these happens once, and are ordered
-			 * by index
+			 * by index, with done being the first in the set
 			 */
 			switch i {
 			case 0:
@@ -90,19 +175,13 @@ func (rd *RuleDriver) Run() {
 				cases = cases[:i]
 			}
 		}
+		rd.Last.ExecDuration = time.Since(start)
 
-		if stdout.Len() > 0 {
-			log.Info("'%s' produced output: %v", rd.Rule.name, stdout.String())
-		}
+		rd.handleCmdBuffers(&stdout, &stderr)
 
-		if stderr.Len() > 0 {
-			log.Error("'%s' produced error output: %v", rd.Rule.name, stderr.String())
-		}
+		rd.updateRuleState()
 
-		switch rd.Rule.status {
-		case RuleStatusRunOnce, RuleStatusRunOnceFail, RuleStatusRunOnceSuccess:
-			rd.Rule.status = RuleStatusDisabled
-		}
+		rd.updateRuleStatus()
 
 		/* I don't think we should allow back-log
 		 *   if the test takes longer than the interval
@@ -111,9 +190,8 @@ func (rd *RuleDriver) Run() {
 		 *   this is fairly cheap to implement
 		 *   although tests will not execute on exactly interval
 		 */
-		rd.LastExecDuration = time.Since(start)
-		next := time.Duration(rd.Rule.interval*float64(time.Second)) - rd.LastExecDuration
-		if rd.Rule.status != RuleStatusDisabled && next > 0 {
+		next := time.Duration(rd.Rule.Interval*float64(time.Second)) - rd.Last.ExecDuration
+		if rd.Rule.Status != RuleStatusDisabled && next > 0 {
 			time.Sleep(next)
 		}
 	}

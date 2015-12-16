@@ -5,19 +5,19 @@ import "reflect"
 import "errors"
 
 func matchesInitial(r Rule) error {
-	if r.interval != 1 {
+	if r.Interval != 1 {
 		return errors.New("interval")
 	}
 
-	if r.timeoutInt != 1 {
+	if r.TimeoutInt != 1 {
 		return errors.New("timeoutInt")
 	}
 
-	if r.status != RuleStatusEnabled {
+	if r.Status != RuleStatusEnabled {
 		return errors.New("status")
 	}
 
-	if r.shell != "/bin/sh" {
+	if r.Shell != "/bin/sh" {
 		return errors.New("shell")
 	}
 
@@ -25,11 +25,11 @@ func matchesInitial(r Rule) error {
 }
 
 func matchesDefaults(r Rule) error {
-	if r.intervalFail != r.intervalFail {
+	if r.IntervalFail != r.IntervalFail {
 		return errors.New("intervalFail")
 	}
 
-	if r.timeoutKill != r.timeoutInt+3 {
+	if r.TimeoutKill != r.TimeoutInt+3 {
 		return errors.New("timeoutKill")
 	}
 
@@ -37,23 +37,23 @@ func matchesDefaults(r Rule) error {
 }
 
 func matchesInherited(r Rule, e Rule) error {
-	if r.status != e.status {
+	if r.Status != e.Status {
 		return errors.New("status")
 	}
 
-	if r.shell != e.shell {
+	if r.Shell != e.Shell {
 		return errors.New("shell")
 	}
 
-	if r.interval != e.interval {
+	if r.Interval != e.Interval {
 		return errors.New("interval")
 	}
 
-	if r.intervalFail != e.intervalFail {
+	if r.IntervalFail != e.IntervalFail {
 		return errors.New("intervalFail")
 	}
 
-	if r.timeoutInt != e.timeoutInt {
+	if r.TimeoutInt != e.TimeoutInt {
 		return errors.New("timeoutInt")
 	}
 
@@ -64,7 +64,7 @@ func matchesExpected(r Rule, e Rule) bool {
 	return reflect.DeepEqual(reflect.ValueOf(r), reflect.ValueOf(e))
 }
 
-func TestEmpty(t *testing.T) {
+func TestConfigEmpty(t *testing.T) {
 	var c Configuration
 
 	if e := c.SetConfiguration(""); e != nil {
@@ -76,7 +76,7 @@ func TestEmpty(t *testing.T) {
 	}
 }
 
-func TestBasic(t *testing.T) {
+func TestConfigBasic(t *testing.T) {
 	var c Configuration
 	var rule *Rule
 
@@ -89,7 +89,7 @@ func TestBasic(t *testing.T) {
 	}
 
 	rule, ok := c.Rules["default"]
-	if !ok || rule.test != "true" {
+	if !ok || rule.Test != "true" {
 		t.Errorf("Received unexpected rule: %+v", *rule)
 	}
 	if e := matchesInitial(*rule); e != nil {
@@ -101,7 +101,7 @@ func TestBasic(t *testing.T) {
 	//fmt.Printf("%+v\n", *rule)
 }
 
-func TestGroup(t *testing.T) {
+func TestConfigGroup(t *testing.T) {
 	var c Configuration
 	var rule *Rule
 
@@ -114,7 +114,7 @@ func TestGroup(t *testing.T) {
 	}
 
 	rule, ok := c.Rules["t1"]
-	if !ok || rule.test != "true" {
+	if !ok || rule.Test != "true" {
 		t.Errorf("Received unexpected rule: %+v", *rule)
 	}
 	if e := matchesInitial(*rule); e != nil {
@@ -126,10 +126,10 @@ func TestGroup(t *testing.T) {
 	//fmt.Printf("%+v\n", *rule)
 }
 
-func TestInheritedFromDefault(t *testing.T) {
+func TestConfigInheritedFromDefault(t *testing.T) {
 	var c Configuration
 	var rule *Rule
-	exp := Rule{status: RuleStatusRunOnce, shell: "/nonexistent", interval: 2, intervalFail: 3, timeoutInt: 4, timeoutKill: 7}
+	exp := Rule{Status: RuleStatusRunOnce, Shell: "/nonexistent", Interval: 2, IntervalFail: 3, TimeoutInt: 4, TimeoutKill: 7}
 	cfg := `
 status=run-once
 shell=/nonexistent
@@ -149,7 +149,7 @@ r1 {
 	}
 
 	rule, ok := c.Rules["r1"]
-	if !ok || rule.test != "true" {
+	if !ok || rule.Test != "true" {
 		t.Errorf("Received unexpected rule: %+v", *rule)
 	}
 
@@ -159,10 +159,10 @@ r1 {
 	//fmt.Printf("%+v\n", *rule)
 }
 
-func TestMultipleInherited(t *testing.T) {
+func TestConfigMultipleInherited(t *testing.T) {
 	var c Configuration
 	var rule *Rule
-	exp := Rule{status: RuleStatusRunOnce, shell: "/nonexistent", interval: 5, intervalFail: 6, timeoutInt: 7, timeoutKill: 10}
+	exp := Rule{Status: RuleStatusRunOnce, Shell: "/nonexistent", Interval: 5, IntervalFail: 6, TimeoutInt: 7, TimeoutKill: 10}
 	cfg := `
 status=run-once
 shell=/nonexistent
@@ -187,7 +187,7 @@ g1 {
 	}
 
 	rule, ok := c.Rules["g1/r1"]
-	if !ok || rule.test != "true" {
+	if !ok || rule.Test != "true" {
 		t.Errorf("Received unexpected rule: %+v", *rule)
 	}
 
@@ -197,7 +197,7 @@ g1 {
 	//fmt.Printf("%+v\n", *rule)
 }
 
-func TestGroupMultiple(t *testing.T) {
+func TestConfigGroupMultiple(t *testing.T) {
 	var c Configuration
 	var rule *Rule
 	cfg := `g1 { r1 { test="true" } r2 { test="false" } } `
@@ -211,7 +211,7 @@ func TestGroupMultiple(t *testing.T) {
 	}
 
 	rule, ok := c.Rules["g1/r1"]
-	if !ok || rule.test != "true" {
+	if !ok || rule.Test != "true" {
 		t.Errorf("Received unexpected rule: %+v", *rule)
 	}
 	if e := matchesInitial(*rule); e != nil {
@@ -223,7 +223,7 @@ func TestGroupMultiple(t *testing.T) {
 	//fmt.Printf("%+v\n", *rule)
 
 	rule, ok = c.Rules["g1/r2"]
-	if !ok || rule.test != "false" {
+	if !ok || rule.Test != "false" {
 		t.Errorf("Received unexpected rule: %+v", *rule)
 	}
 	if e := matchesInitial(*rule); e != nil {
