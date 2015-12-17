@@ -1,0 +1,12 @@
+diff --git a/vendor/src/github.com/mitchellh/go-libucl/libucl.go b/vendor/src/github.com/mitchellh/go-libucl/libucl.go
+index 6542301..cc12878 100644
+--- a/vendor/src/github.com/mitchellh/go-libucl/libucl.go
++++ b/vendor/src/github.com/mitchellh/go-libucl/libucl.go
+@@ -1,5 +1,5 @@
+ package libucl
+ 
+-// #cgo CFLAGS: -Ivendor/libucl/include -Wno-int-to-void-pointer-cast
+-// #cgo LDFLAGS: -Lvendor/libucl -lucl
++// #cgo CFLAGS: -I/usr/local/include -Wno-int-to-void-pointer-cast
++// #cgo LDFLAGS: -L/usr/local/lib -lucl
+ import "C"

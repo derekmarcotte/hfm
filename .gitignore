@@ -1,4 +1,5 @@
 /bin/
 /pkg/
 /vendor/pkg/
+/vendor/src/
 /etc/hfm-test.conf
