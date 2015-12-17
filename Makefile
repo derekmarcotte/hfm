@@ -1,7 +1,6 @@
-
-
 help:
-	@echo $(.ALLTARGETS)
+	@echo "Targets:"
+	@for x in $(.ALLTARGETS); do if [ "$$x" != ".END" ]; then printf "\t%s\n" $$x; fi; done
 
 build: 
 	gb build all
