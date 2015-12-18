@@ -31,6 +31,7 @@ package main
 /* stdlib includes */
 import (
 	"bytes"
+	"fmt"
 	"os/exec"
 	"reflect"
 	"syscall"
@@ -44,9 +45,11 @@ type ExitRecord struct {
 }
 
 type RuleDriver struct {
-	Rule Rule
-	Done chan *RuleDriver
-	Last ExitRecord
+	Rule        Rule
+	Done        chan *RuleDriver
+	Last        ExitRecord
+	AppInstance int64
+	count       int64
 }
 
 func (rd *RuleDriver) resetLast() {
@@ -58,7 +61,7 @@ func (rd *RuleDriver) resetLast() {
 func (rd *RuleDriver) handleCmdDone(value reflect.Value) {
 	err := value.Interface()
 	if err != nil {
-		log.Error("'%s' completed with error: %v", rd.Rule.Name, err)
+		log.Error("'%s' run %s completed with error: %v", rd.Rule.Name, rd.GetRunUid(), err)
 
 		ee := err.(*exec.ExitError)
 		rd.Last.Error = ee
@@ -70,17 +73,17 @@ func (rd *RuleDriver) handleCmdDone(value reflect.Value) {
 }
 
 func (rd *RuleDriver) handleCmdIntTimeout(cmd *exec.Cmd) {
-	log.Info("'%s' interrupt timeout exceeded, issuing interrupt.", rd.Rule.Name)
+	log.Info("'%s' run %s interrupt timeout exceeded, issuing interrupt.", rd.Rule.Name, rd.GetRunUid())
 	if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
-		log.Error("'%s' failed to interrupt test process: %v, disabling further checks", rd.Rule.Name, err)
+		log.Error("'%s' run %s failed to interrupt test process: %v, disabling further checks", rd.Rule.Name, rd.GetRunUid(), err)
 		rd.Rule.Status = RuleStatusDisabled
 	}
 }
 
 func (rd *RuleDriver) handleCmdKillTimeout(cmd *exec.Cmd) {
-	log.Warning("'%s' kill timeout exceeded, issuing kill.", rd.Rule.Name)
+	log.Warning("'%s' run %s kill timeout exceeded, issuing kill.", rd.Rule.Name, rd.GetRunUid())
 	if err := cmd.Process.Kill(); err != nil {
-		log.Error("'%s' failed to kill test process: %v, disabling further checks", rd.Rule.Name, err)
+		log.Error("'%s' run %s failed to kill test process: %v, disabling further checks", rd.Rule.Name, rd.GetRunUid(), err)
 		rd.Rule.Status = RuleStatusDisabled
 	}
 }
@@ -88,18 +91,18 @@ func (rd *RuleDriver) handleCmdKillTimeout(cmd *exec.Cmd) {
 /* process any output produced by the command, get buffers ready for next run */
 func (rd *RuleDriver) handleCmdBuffers(stdout *bytes.Buffer, stderr *bytes.Buffer) {
 	if stdout.Len() > 0 {
-		log.Info("'%s' produced output: %v", rd.Rule.Name, stdout.String())
+		log.Info("'%s' run %s test produced output: %v", rd.Rule.Name, rd.GetRunUid(), stdout.String())
 	}
 	stdout.Reset()
 
 	if stderr.Len() > 0 {
-		log.Error("'%s' produced error output: %v", rd.Rule.Name, stderr.String())
+		log.Error("'%s' run %s test produced error output: %v", rd.Rule.Name, rd.GetRunUid(), stderr.String())
 	}
 	stderr.Reset()
 }
 
 func (rd *RuleDriver) handleStateChange(newState RuleStateType) {
-	log.Warning("'%s' changed state to: %v", rd.Rule.Name, newState)
+	log.Warning("'%s' run %s changed state to: %v", rd.Rule.Name, rd.GetRunUid(), newState)
 	rd.Rule.LastState = newState
 
 	var changeCmd string
@@ -113,9 +116,24 @@ func (rd *RuleDriver) handleStateChange(newState RuleStateType) {
 		return
 	}
 
-	/* XXX: may never return, oooooooo */
-	cmd := exec.Command(rd.Rule.Shell, "-c", changeCmd)
-	go cmd.Run()
+	go func(changeCmd string) {
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+
+		/* XXX: may never return, oooooooo */
+		cmd := exec.Command(rd.Rule.Shell, "-c", changeCmd)
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+
+		cmd.Run()
+
+		if stdout.Len() > 0 {
+			log.Info("'%s' run %s change command produced output: %v", rd.Rule.Name, rd.GetRunUid(), stdout.String())
+		}
+		if stderr.Len() > 0 {
+			log.Error("'%s' run %s change command produced error output: %v", rd.Rule.Name, rd.GetRunUid(), stderr.String())
+		}
+	}(changeCmd)
 }
 
 /* update the state of the rule if required, take action if state or status
@@ -134,6 +152,14 @@ func (rd *RuleDriver) updateRuleState() {
 	switch {
 	case rd.Rule.LastState != newState, rd.Rule.Status == RuleStatusAlwaysFail, rd.Rule.Status == RuleStatusAlwaysSuccess:
 		rd.handleStateChange(newState)
+	}
+}
+
+func (rd *RuleDriver) GetRunUid() string {
+	if rd.AppInstance != 0 {
+		return fmt.Sprintf("%x:%s:%x", rd.AppInstance, rd.Rule.Name, rd.count)
+	} else {
+		return fmt.Sprintf("%s:%x", rd.Rule.Name, rd.count)
 	}
 }
 
@@ -156,7 +182,9 @@ func (rd *RuleDriver) Run() {
 
 	for rd.Rule.Status != RuleStatusDisabled {
 		start := time.Now()
-		log.Debug("'%s' starting at %v...", rd.Rule.Name, start)
+		rd.count++
+
+		log.Debug("'%s' starting run %v, at %v...", rd.Rule.Name, rd.GetRunUid(), start)
 
 		rd.resetLast()
 
@@ -171,7 +199,7 @@ func (rd *RuleDriver) Run() {
 		cases[2] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(timeoutInt))}
 
 		if err := cmd.Start(); err != nil {
-			log.Error("'%s' failed to start: %v", rd.Rule.Name, err)
+			log.Error("'%s' %s failed to start: %v", rd.Rule.Name, rd.GetRunUid(), err)
 			rd.Done <- rd
 			return
 		}

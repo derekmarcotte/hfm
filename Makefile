@@ -1,5 +1,6 @@
 help:
 	@echo "Targets:"
+	@echo "A fresh build might be make deps patch-local-go-libucl test build"
 	@for x in $(.ALLTARGETS); do if [ "$$x" != ".END" ]; then printf "\t%s\n" $$x; fi; done
 
 build: 

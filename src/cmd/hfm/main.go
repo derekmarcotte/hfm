@@ -33,6 +33,7 @@ import (
 	"flag"
 	"os"
 	"runtime"
+	"time"
 )
 
 /* external includes */
@@ -58,6 +59,9 @@ func main() {
 
 	ruleDone := make(chan *RuleDriver)
 
+	/* close enough for most applications */
+	appInstance := time.Now().UnixNano()
+
 	log.Info("Loaded %d rules.", len(config.Rules))
 	log.Debug("%d goroutines - before main dispatch loop.", runtime.NumGoroutine())
 	for _, rule := range config.Rules {
@@ -66,7 +70,7 @@ func main() {
 
 		// driver gets its own copy of the rule, safe from
 		// side effects later
-		driver := RuleDriver{Rule: *rule, Done: ruleDone}
+		driver := RuleDriver{Rule: *rule, Done: ruleDone, AppInstance: appInstance}
 		go driver.Run()
 	}
 	log.Debug("%d goroutines - after dispatch loop.", runtime.NumGoroutine())
