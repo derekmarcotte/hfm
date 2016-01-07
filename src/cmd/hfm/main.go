@@ -36,6 +36,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 )
@@ -50,9 +51,16 @@ type LogConfiguration struct {
 	Facility string
 }
 
+/* 2015-12-16, before initial post to github */
+const HFM_EPOCH = 1450224000000000000
+
 /* meat */
 /* dependancy injection is for another day */
-var log = logging.MustGetLogger(path.Base(os.Args[0]))
+var log = logging.MustGetLogger(getLogName())
+
+func getLogName() string {
+	return path.Base(os.Args[0])
+}
 
 func configureLogging(conf LogConfiguration) error {
 	conf.Where = strings.ToLower(conf.Where)
@@ -94,10 +102,31 @@ func configureLogging(conf LogConfiguration) error {
 		return fmt.Errorf("Invalid syslog facility")
 	}
 
-	be, _ := logging.NewSyslogBackendPriority(path.Base(os.Args[0]), f)
+	be, _ := logging.NewSyslogBackendPriority(getLogName(), f)
 	log.SetBackend(logging.AddModuleLevel(be))
 
 	return nil
+}
+
+/* takes a set of rules, and condenses into buckets for each start_delay */
+func scheduleRules(order []string, rules *map[string]*Rule) ([]float64, map[float64][]*Rule) {
+	var delays []float64
+	ruleBuckets := make(map[float64][]*Rule)
+
+	for _, ruleName := range order {
+		rule := (*rules)[ruleName]
+
+		/* keep track of delays, in order */
+		if _, ok := ruleBuckets[rule.StartDelay]; !ok {
+			delays = append(delays, rule.StartDelay)
+			ruleBuckets[rule.StartDelay] = []*Rule{rule}
+		} else {
+			ruleBuckets[rule.StartDelay] = append(ruleBuckets[rule.StartDelay], rule)
+		}
+	}
+
+	sort.Float64s(delays)
+	return delays, ruleBuckets
 }
 
 func main() {
@@ -124,20 +153,36 @@ func main() {
 	ruleDone := make(chan *RuleDriver)
 
 	/* close enough for most applications */
-	appInstance := time.Now().UnixNano()
+	appInstance := time.Now().UnixNano() - HFM_EPOCH
 
 	log.Info("Loaded %d rules.", len(config.Rules))
 	log.Debug("%d goroutines - before main dispatch loop.", runtime.NumGoroutine())
-	for _, rule := range config.Rules {
-		log.Debug("Dispatching rule '%s'", rule.Name)
-		log.Debug("%s details: %+v", rule.Name, rule)
 
-		// driver gets its own copy of the rule, safe from
-		// side effects later
-		driver := RuleDriver{Rule: *rule, Done: ruleDone, AppInstance: appInstance}
-		go driver.Run()
-	}
-	log.Debug("%d goroutines - after dispatch loop.", runtime.NumGoroutine())
+	delays, ruleBuckets := scheduleRules(config.RulesOrder, &config.Rules)
+
+	go func() {
+		start := time.Now()
+		for _, d := range delays {
+			delayBy := time.Duration((d - time.Since(start).Seconds()) * float64(time.Second))
+			log.Debug("Running bucket %v, should delay by %+v", d, delayBy)
+			if delayBy > 0 {
+				time.Sleep(delayBy)
+			}
+
+			/* dispatch rules that are scheduled to start at this interval */
+			for _, rule := range ruleBuckets[d] {
+				log.Debug("Dispatching rule '%s'", rule.Name)
+				log.Debug("%s details: %+v", rule.Name, rule)
+
+				// driver gets its own copy of the rule, safe from
+				// side effects later
+				driver := RuleDriver{Rule: *rule, Done: ruleDone, AppInstance: appInstance}
+				go driver.Run()
+			}
+		}
+
+		log.Debug("%d goroutines - after dispatch loop.", runtime.NumGoroutine())
+	}()
 
 	for i := 0; i < len(config.Rules); i++ {
 		driver := <-ruleDone

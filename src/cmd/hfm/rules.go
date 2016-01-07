@@ -74,6 +74,9 @@ type Rule struct {
 	/* what is the period between scheduled runs on previously failed rules */
 	IntervalFail float64
 
+	/* how long do I delay until starting for the first time */
+	StartDelay float64
+
 	/* what is the period this task can run for, before killing it */
 	TimeoutInt  float64
 	TimeoutKill float64

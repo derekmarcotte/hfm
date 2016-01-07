@@ -53,6 +53,7 @@ type Configuration struct {
 	path         string
 	shell        string
 	Rules        map[string]*Rule
+	RulesOrder   []string
 	ruleDefaults map[string]*Rule
 }
 
@@ -163,6 +164,7 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 		config.ruleDefaults[name] = &rule
 	} else {
 		config.Rules[name] = &rule
+		config.RulesOrder = append(config.RulesOrder, name)
 	}
 
 	i := uclConfig.Iterate(true)
@@ -227,6 +229,13 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 			switch c.Type() {
 			case libucl.ObjectTypeInt, libucl.ObjectTypeFloat, libucl.ObjectTypeTime:
 				rule.IntervalFail = c.ToFloat()
+			default:
+				return errors.New(fmt.Sprintf("%s: '%s' must be a valid numeric type", name, field))
+			}
+		case "start_delay":
+			switch c.Type() {
+			case libucl.ObjectTypeInt, libucl.ObjectTypeFloat, libucl.ObjectTypeTime:
+				rule.StartDelay = c.ToFloat()
 			default:
 				return errors.New(fmt.Sprintf("%s: '%s' must be a valid numeric type", name, field))
 			}
@@ -308,6 +317,10 @@ func (c *Configuration) mapDefaults(dst *Rule, src Rule) {
 
 	if dst.IntervalFail == 0 {
 		dst.IntervalFail = src.IntervalFail
+	}
+
+	if dst.StartDelay == 0 {
+		dst.StartDelay = src.StartDelay
 	}
 
 	if dst.TimeoutInt == 0 {

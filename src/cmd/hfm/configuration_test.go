@@ -28,25 +28,27 @@
 
 package main
 
-import "testing"
-import "reflect"
-import "errors"
+import (
+	"errors"
+	"reflect"
+	"testing"
+)
 
 func matchesInitial(r Rule) error {
 	if r.Interval != 1 {
-		return errors.New("interval")
+		return errors.New("Interval")
 	}
 
 	if r.TimeoutInt != 1 {
-		return errors.New("timeoutInt")
+		return errors.New("TimeoutInt")
 	}
 
 	if r.Status != RuleStatusEnabled {
-		return errors.New("status")
+		return errors.New("Status")
 	}
 
 	if r.Shell != "/bin/sh" {
-		return errors.New("shell")
+		return errors.New("Shell")
 	}
 
 	return nil
@@ -54,11 +56,11 @@ func matchesInitial(r Rule) error {
 
 func matchesDefaults(r Rule) error {
 	if r.IntervalFail != r.IntervalFail {
-		return errors.New("intervalFail")
+		return errors.New("IntervalFail")
 	}
 
 	if r.TimeoutKill != r.TimeoutInt+3 {
-		return errors.New("timeoutKill")
+		return errors.New("TimeoutKill")
 	}
 
 	return nil
@@ -66,23 +68,27 @@ func matchesDefaults(r Rule) error {
 
 func matchesInherited(r Rule, e Rule) error {
 	if r.Status != e.Status {
-		return errors.New("status")
+		return errors.New("Status")
 	}
 
 	if r.Shell != e.Shell {
-		return errors.New("shell")
+		return errors.New("Shell")
 	}
 
 	if r.Interval != e.Interval {
-		return errors.New("interval")
+		return errors.New("Interval")
 	}
 
 	if r.IntervalFail != e.IntervalFail {
-		return errors.New("intervalFail")
+		return errors.New("IntervalFail")
+	}
+
+	if r.StartDelay != e.StartDelay {
+		return errors.New("StartDelay")
 	}
 
 	if r.TimeoutInt != e.TimeoutInt {
-		return errors.New("timeoutInt")
+		return errors.New("TimeoutInt")
 	}
 
 	return nil
@@ -157,13 +163,14 @@ func TestConfigGroup(t *testing.T) {
 func TestConfigInheritedFromDefault(t *testing.T) {
 	var c Configuration
 	var rule *Rule
-	exp := Rule{Status: RuleStatusRunOnce, Shell: "/nonexistent", Interval: 2, IntervalFail: 3, TimeoutInt: 4, TimeoutKill: 7}
+	exp := Rule{Status: RuleStatusRunOnce, Shell: "/nonexistent", Interval: 2, IntervalFail: 3, TimeoutInt: 4, StartDelay: 5, TimeoutKill: 7}
 	cfg := `
 status=run-once
 shell=/nonexistent
 interval=2
 fail_interval=3
 timeout_int=4
+start_delay=5
 r1 {
 	test="true"
 }`
@@ -190,17 +197,19 @@ r1 {
 func TestConfigMultipleInherited(t *testing.T) {
 	var c Configuration
 	var rule *Rule
-	exp := Rule{Status: RuleStatusRunOnce, Shell: "/nonexistent", Interval: 5, IntervalFail: 6, TimeoutInt: 7, TimeoutKill: 10}
+	exp := Rule{Status: RuleStatusRunOnce, Shell: "/nonexistent", Interval: 5, IntervalFail: 6, TimeoutInt: 7, StartDelay: 8, TimeoutKill: 10}
 	cfg := `
 status=run-once
 shell=/nonexistent
 interval=2
 fail_interval=3
 timeout_int=4
+start_delay=5
 g1 {
 	interval=5
 	fail_interval=6
 	timeout_int=7
+	start_delay=8
 	r1 {
 		test="true"
 	}
@@ -261,4 +270,39 @@ func TestConfigGroupMultiple(t *testing.T) {
 		t.Errorf("Rule didn't match expected value for '%s': %+v", e, rule)
 	}
 	//fmt.Printf("%+v\n", *rule)
+}
+
+func TestConfigOrdering(t *testing.T) {
+	var c Configuration
+	c.SetConfiguration(`
+g1 {
+	t0	{ test = "true" }
+	t50	{ test = "true" }
+	t500	{ test = "true" }
+}
+g2 {
+	t50	{ test = "true" }
+	t500	{ test = "true" }
+	t0	{ test = "true" }
+}
+g3 {
+	t500	{ test = "true" }
+	t0	{ test = "true" }
+	t50	{ test = "true" }
+}
+`)
+
+	e := []string{
+		"g1/t0", "g1/t50", "g1/t500",
+		"g2/t50", "g2/t500", "g2/t0",
+		"g3/t500", "g3/t0", "g3/t50",
+	}
+
+	i := 0
+	for _, rule := range c.RulesOrder {
+		if rule != e[i] {
+			t.Errorf("Rule ordering didn't match expected ordering")
+		}
+		i++
+	}
 }
