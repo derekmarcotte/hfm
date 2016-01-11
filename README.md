@@ -4,7 +4,9 @@ hfm is an application to run tests in parallel at a high frequency. If the
 outcome of the test results in a state change, other commands can be executed.
 
 It is designed to be a general purpose tool, by having both the tests and the
-state change commands be interpreted by a shell, such as /bin/sh.
+state change commands be executed by the operating system.  For example, one
+could write the test in shell or c, and have it called through the exec 
+facility.
 
 An example application is to poll other network services for health, and to
 take actions based on their health status changes.

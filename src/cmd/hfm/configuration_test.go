@@ -47,10 +47,6 @@ func matchesInitial(r Rule) error {
 		return errors.New("Status")
 	}
 
-	if r.Shell != "/bin/sh" {
-		return errors.New("Shell")
-	}
-
 	return nil
 }
 
@@ -69,10 +65,6 @@ func matchesDefaults(r Rule) error {
 func matchesInherited(r Rule, e Rule) error {
 	if r.Status != e.Status {
 		return errors.New("Status")
-	}
-
-	if r.Shell != e.Shell {
-		return errors.New("Shell")
 	}
 
 	if r.Interval != e.Interval {
@@ -163,10 +155,9 @@ func TestConfigGroup(t *testing.T) {
 func TestConfigInheritedFromDefault(t *testing.T) {
 	var c Configuration
 	var rule *Rule
-	exp := Rule{Status: RuleStatusRunOnce, Shell: "/nonexistent", Interval: 2, IntervalFail: 3, TimeoutInt: 4, StartDelay: 5, TimeoutKill: 7}
+	exp := Rule{Status: RuleStatusRunOnce, Interval: 2, IntervalFail: 3, TimeoutInt: 4, StartDelay: 5, TimeoutKill: 7}
 	cfg := `
 status=run-once
-shell=/nonexistent
 interval=2
 fail_interval=3
 timeout_int=4
@@ -197,10 +188,9 @@ r1 {
 func TestConfigMultipleInherited(t *testing.T) {
 	var c Configuration
 	var rule *Rule
-	exp := Rule{Status: RuleStatusRunOnce, Shell: "/nonexistent", Interval: 5, IntervalFail: 6, TimeoutInt: 7, StartDelay: 8, TimeoutKill: 10}
+	exp := Rule{Status: RuleStatusRunOnce, Interval: 5, IntervalFail: 6, TimeoutInt: 7, StartDelay: 8, TimeoutKill: 10}
 	cfg := `
 status=run-once
-shell=/nonexistent
 interval=2
 fail_interval=3
 timeout_int=4

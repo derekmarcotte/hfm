@@ -128,7 +128,7 @@ func TestDriverKill(t *testing.T) {
 func TestDriverExit1(t *testing.T) {
 	var c Configuration
 
-	cfg := `status=run-once; test="exit 1"`
+	cfg := `status=run-once; test="false"`
 
 	c.SetConfiguration(cfg)
 
@@ -157,7 +157,7 @@ func TestDriverChangeFail(t *testing.T) {
 
 	exists := true
 
-	cfg := `status=run-once; test="exit 1"; change_fail="rm ` + f.Name() + `"`
+	cfg := `status=run-once; test="false"; change_fail="rm"; change_success_arguments = "` + f.Name() + `"`
 
 	c.SetConfiguration(cfg)
 
@@ -198,7 +198,7 @@ func TestDriverChangeSuccess(t *testing.T) {
 
 	exists := true
 
-	cfg := `status=run-once; test="true"; change_success="rm ` + f.Name() + `"`
+	cfg := `status=run-once; test="true"; change_success="rm"; change_success_arguments = "` + f.Name() + `"`
 
 	c.SetConfiguration(cfg)
 

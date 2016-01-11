@@ -157,7 +157,6 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 		rule.Interval = 1
 		rule.TimeoutInt = 1
 		rule.Status = RuleStatusEnabled
-		rule.Shell = "/bin/sh"
 	}
 
 	if !isRule {
@@ -189,12 +188,6 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 		//fmt.Printf("%s%+v\t%v\n", strings.Repeat("\t", tabs), c.Key(), c.Type())
 
 		switch field {
-		case "shell":
-			if c.Type() != libucl.ObjectTypeString {
-				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, field))
-			}
-
-			rule.Shell = c.ToString()
 		case "status":
 			if c.Type() != libucl.ObjectTypeString {
 				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, field))
@@ -218,56 +211,74 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 			default:
 				return errors.New(fmt.Sprintf("%s: '%s' does not contain a valid string", name, field))
 			}
-		case "interval":
+		case "start_delay", "interval", "fail_interval", "timeout_int", "timeout_kill":
+			tmp := 0.0
+			/* interval/duration fields */
 			switch c.Type() {
 			case libucl.ObjectTypeInt, libucl.ObjectTypeFloat, libucl.ObjectTypeTime:
-				rule.Interval = c.ToFloat()
+				tmp = c.ToFloat()
 			default:
 				return errors.New(fmt.Sprintf("%s: '%s' must be a valid numeric type", name, field))
 			}
-		case "fail_interval":
-			switch c.Type() {
-			case libucl.ObjectTypeInt, libucl.ObjectTypeFloat, libucl.ObjectTypeTime:
-				rule.IntervalFail = c.ToFloat()
-			default:
-				return errors.New(fmt.Sprintf("%s: '%s' must be a valid numeric type", name, field))
+
+			switch field {
+			case "start_delay":
+				rule.StartDelay = tmp
+			case "interval":
+				rule.Interval = tmp
+			case "fail_interval":
+				rule.IntervalFail = tmp
+			case "timeout_int":
+				rule.TimeoutInt = tmp
+			case "timeout_kill":
+				rule.TimeoutKill = tmp
 			}
-		case "start_delay":
-			switch c.Type() {
-			case libucl.ObjectTypeInt, libucl.ObjectTypeFloat, libucl.ObjectTypeTime:
-				rule.StartDelay = c.ToFloat()
-			default:
-				return errors.New(fmt.Sprintf("%s: '%s' must be a valid numeric type", name, field))
-			}
-		case "timeout_int":
-			switch c.Type() {
-			case libucl.ObjectTypeInt, libucl.ObjectTypeFloat, libucl.ObjectTypeTime:
-				rule.TimeoutInt = c.ToFloat()
-			default:
-				return errors.New(fmt.Sprintf("%s: '%s' must be a valid numeric type", name, field))
-			}
-		case "timeout_kill":
-			switch c.Type() {
-			case libucl.ObjectTypeInt, libucl.ObjectTypeFloat, libucl.ObjectTypeTime:
-				rule.TimeoutKill = c.ToFloat()
-			default:
-				return errors.New(fmt.Sprintf("%s: '%s' must be a valid numeric type", name, field))
-			}
-		case "test":
+		case "test", "change_fail", "change_success":
+			/* command fields */
 			if c.Type() != libucl.ObjectTypeString {
 				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, field))
 			}
-			rule.Test = c.ToString()
-		case "change_fail":
-			if c.Type() != libucl.ObjectTypeString {
-				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, field))
+
+			tmp := c.ToString()
+			switch field {
+			case "test":
+				rule.Test = tmp
+			case "change_fail":
+				rule.ChangeFail = tmp
+			case "change_success":
+				rule.ChangeSuccess = tmp
 			}
-			rule.ChangeFail = c.ToString()
-		case "change_success":
-			if c.Type() != libucl.ObjectTypeString {
-				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, field))
+		case "test_arguments", "change_fail_arguments", "change_success_arguments":
+			tmp := []string{}
+			if c.Type() == libucl.ObjectTypeString {
+				tmp = append(tmp, c.ToString())
+			} else if c.Type() == libucl.ObjectTypeArray {
+
+				j := c.Iterate(true)
+				defer j.Close()
+
+				for arg := j.Next(); arg != nil; arg = j.Next() {
+					defer arg.Close()
+
+					if c.Type() != libucl.ObjectTypeString {
+						return errors.New(fmt.Sprintf("%s: '%s' must contain only string elements", name, field))
+					}
+
+					tmp = append(tmp, arg.ToString())
+				}
+
+			} else {
+				return errors.New(fmt.Sprintf("%s: '%s' must be a string or an array of strings", name, field))
 			}
-			rule.ChangeSuccess = c.ToString()
+
+			switch field {
+			case "test_arguments":
+				rule.TestArguments = tmp
+			case "change_fail_arguments":
+				rule.ChangeFailArguments = tmp
+			case "change_success_arguments":
+				rule.ChangeSuccessArguments = tmp
+			}
 		default:
 			//fmt.Printf("%s%+v\n", strings.Repeat("\t", tabs), c)
 			return errors.New(fmt.Sprintf("%s: '%s' unrecognized property", name, c.Key()))
@@ -305,10 +316,6 @@ func (c *Configuration) resolveDefaults() {
 func (c *Configuration) mapDefaults(dst *Rule, src Rule) {
 	if dst.Status == RuleStatusUnset {
 		dst.Status = src.Status
-	}
-
-	if dst.Shell == "" {
-		dst.Shell = src.Shell
 	}
 
 	if dst.Interval == 0 {

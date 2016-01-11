@@ -81,18 +81,18 @@ type Rule struct {
 	TimeoutInt  float64
 	TimeoutKill float64
 
-	/* shell to execute commands in */
-	Shell string
-
-	/* shell command to run to initiate test */
+	/* command to run to initiate test */
 	/*  hoping to extend to support go-native tests */
-	Test string
+	Test          string
+	TestArguments []string
 
-	/* shell command to run when the state changes to failed */
-	ChangeFail string
+	/* command to run when the state changes to failed */
+	ChangeFail          string
+	ChangeFailArguments []string
 
-	/* shell command to run when the state changes to success */
-	ChangeSuccess string
+	/* command to run when the state changes to success */
+	ChangeSuccess          string
+	ChangeSuccessArguments []string
 
 	/* the result of the last rule check */
 	LastState RuleStateType

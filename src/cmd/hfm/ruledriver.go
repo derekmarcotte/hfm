@@ -106,22 +106,25 @@ func (rd *RuleDriver) handleStateChange(newState RuleStateType) {
 	rd.Rule.LastState = newState
 
 	var changeCmd string
+	var args []string
 	if newState == RuleStateSuccess {
 		changeCmd = rd.Rule.ChangeSuccess
+		args = rd.Rule.ChangeSuccessArguments
 	} else {
 		changeCmd = rd.Rule.ChangeFail
+		args = rd.Rule.ChangeSuccessArguments
 	}
 
 	if changeCmd == "" {
 		return
 	}
 
-	go func(changeCmd string) {
+	go func(changeCmd string, args []string) {
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
 
 		/* XXX: may never return, oooooooo */
-		cmd := exec.Command(rd.Rule.Shell, "-c", changeCmd)
+		cmd := exec.Command(changeCmd, args...)
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 
@@ -133,7 +136,7 @@ func (rd *RuleDriver) handleStateChange(newState RuleStateType) {
 		if stderr.Len() > 0 {
 			log.Error("'%s' run %s change command produced error output: %v", rd.Rule.Name, rd.GetRunUid(), stderr.String())
 		}
-	}(changeCmd)
+	}(changeCmd, args)
 }
 
 /* update the state of the rule if required, take action if state or status
@@ -188,7 +191,7 @@ func (rd *RuleDriver) Run() {
 
 		rd.resetLast()
 
-		cmd := exec.Command(rd.Rule.Shell, "-c", rd.Rule.Test)
+		cmd := exec.Command(rd.Rule.Test, rd.Rule.TestArguments...)
 
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
