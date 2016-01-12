@@ -260,7 +260,7 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 				for arg := j.Next(); arg != nil; arg = j.Next() {
 					defer arg.Close()
 
-					if c.Type() != libucl.ObjectTypeString {
+					if arg.Type() != libucl.ObjectTypeString {
 						return errors.New(fmt.Sprintf("%s: '%s' must contain only string elements", name, field))
 					}
 

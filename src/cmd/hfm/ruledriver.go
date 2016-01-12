@@ -112,7 +112,7 @@ func (rd *RuleDriver) handleStateChange(newState RuleStateType) {
 		args = rd.Rule.ChangeSuccessArguments
 	} else {
 		changeCmd = rd.Rule.ChangeFail
-		args = rd.Rule.ChangeSuccessArguments
+		args = rd.Rule.ChangeFailArguments
 	}
 
 	if changeCmd == "" {
