@@ -89,10 +89,15 @@ type Rule struct {
 	/* command to run when the state changes to failed */
 	ChangeFail          string
 	ChangeFailArguments []string
+	ChangeFailDebounce  uint16
 
 	/* command to run when the state changes to success */
 	ChangeSuccess          string
 	ChangeSuccessArguments []string
+	ChangeSuccessDebounce  uint16
+
+	/* current state change, debounce status */
+	ChangeDebounce uint16
 
 	/* the result of the last rule check */
 	LastState RuleStateType

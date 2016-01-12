@@ -47,11 +47,19 @@ func matchesInitial(r Rule) error {
 		return errors.New("Status")
 	}
 
+	if r.ChangeFailDebounce != 1 {
+		return errors.New("ChangeFailDebounce")
+	}
+
+	if r.ChangeSuccessDebounce != 1 {
+		return errors.New("ChangeSuccessDebounce")
+	}
+
 	return nil
 }
 
 func matchesDefaults(r Rule) error {
-	if r.IntervalFail != r.IntervalFail {
+	if r.IntervalFail != r.Interval {
 		return errors.New("IntervalFail")
 	}
 
@@ -81,6 +89,14 @@ func matchesInherited(r Rule, e Rule) error {
 
 	if r.TimeoutInt != e.TimeoutInt {
 		return errors.New("TimeoutInt")
+	}
+
+	if r.ChangeFailDebounce != e.ChangeFailDebounce {
+		return errors.New("ChangeFailDebounce")
+	}
+
+	if r.ChangeSuccessDebounce != e.ChangeSuccessDebounce {
+		return errors.New("ChangeSuccessDebounce")
 	}
 
 	return nil
@@ -155,13 +171,15 @@ func TestConfigGroup(t *testing.T) {
 func TestConfigInheritedFromDefault(t *testing.T) {
 	var c Configuration
 	var rule *Rule
-	exp := Rule{Status: RuleStatusRunOnce, Interval: 2, IntervalFail: 3, TimeoutInt: 4, StartDelay: 5, TimeoutKill: 7}
+	exp := Rule{Status: RuleStatusRunOnce, Interval: 2, IntervalFail: 3, TimeoutInt: 4, StartDelay: 5, TimeoutKill: 7, ChangeFailDebounce: 6, ChangeSuccessDebounce: 7}
 	cfg := `
 status=run-once
 interval=2
 fail_interval=3
 timeout_int=4
 start_delay=5
+change_fail_debounce=6
+change_success_debounce=7
 r1 {
 	test="true"
 }`
@@ -188,18 +206,22 @@ r1 {
 func TestConfigMultipleInherited(t *testing.T) {
 	var c Configuration
 	var rule *Rule
-	exp := Rule{Status: RuleStatusRunOnce, Interval: 5, IntervalFail: 6, TimeoutInt: 7, StartDelay: 8, TimeoutKill: 10}
+	exp := Rule{Status: RuleStatusRunOnce, Interval: 5, IntervalFail: 6, TimeoutInt: 7, StartDelay: 8, TimeoutKill: 10, ChangeFailDebounce: 9, ChangeSuccessDebounce: 10}
 	cfg := `
 status=run-once
 interval=2
 fail_interval=3
 timeout_int=4
 start_delay=5
+change_fail_debounce=6
+change_success_debounce=7
 g1 {
 	interval=5
 	fail_interval=6
 	timeout_int=7
 	start_delay=8
+	change_fail_debounce=9
+	change_success_debounce=10
 	r1 {
 		test="true"
 	}

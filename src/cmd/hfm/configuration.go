@@ -190,7 +190,7 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 		switch field {
 		case "status":
 			if c.Type() != libucl.ObjectTypeString {
-				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, field))
+				return errors.New(fmt.Sprintf("%s: '%s' must be a string type, got type %v", name, field, c.Type()))
 			}
 
 			switch strings.ToLower(c.ToString()) {
@@ -218,7 +218,7 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 			case libucl.ObjectTypeInt, libucl.ObjectTypeFloat, libucl.ObjectTypeTime:
 				tmp = c.ToFloat()
 			default:
-				return errors.New(fmt.Sprintf("%s: '%s' must be a valid numeric type", name, field))
+				return errors.New(fmt.Sprintf("%s: '%s' must be a valid numeric type, got type %v", name, field, c.Type()))
 			}
 
 			switch field {
@@ -236,7 +236,7 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 		case "test", "change_fail", "change_success":
 			/* command fields */
 			if c.Type() != libucl.ObjectTypeString {
-				return errors.New(fmt.Sprintf("%s: '%s' must be a string type", name, field))
+				return errors.New(fmt.Sprintf("%s: '%s' must be a string type, got type %v", name, field, c.Type()))
 			}
 
 			tmp := c.ToString()
@@ -261,14 +261,14 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 					defer arg.Close()
 
 					if arg.Type() != libucl.ObjectTypeString {
-						return errors.New(fmt.Sprintf("%s: '%s' must contain only string elements", name, field))
+						return errors.New(fmt.Sprintf("%s: '%s' must contain only string elements, got type %v", name, field, arg.Type()))
 					}
 
 					tmp = append(tmp, arg.ToString())
 				}
 
 			} else {
-				return errors.New(fmt.Sprintf("%s: '%s' must be a string or an array of strings", name, field))
+				return errors.New(fmt.Sprintf("%s: '%s' must be a string or an array of strings, got type %v", name, field, c.Type()))
 			}
 
 			switch field {
@@ -279,6 +279,24 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 			case "change_success_arguments":
 				rule.ChangeSuccessArguments = tmp
 			}
+		case "change_fail_debounce", "change_success_debounce":
+			if c.Type() != libucl.ObjectTypeInt {
+				return errors.New(fmt.Sprintf("%s: '%s' must be an integer type, got type %v", name, field, c.Type()))
+			}
+
+			tmp := c.ToInt()
+
+			if tmp < 1 || tmp > 65535 {
+				return errors.New(fmt.Sprintf("%s: '%s' must be in 1..65535", name, field))
+			}
+
+			switch field {
+			case "change_fail_debounce":
+				rule.ChangeFailDebounce = uint16(tmp)
+			case "change_success_debounce":
+				rule.ChangeSuccessDebounce = uint16(tmp)
+			}
+
 		default:
 			//fmt.Printf("%s%+v\n", strings.Repeat("\t", tabs), c)
 			return errors.New(fmt.Sprintf("%s: '%s' unrecognized property", name, c.Key()))
@@ -309,6 +327,14 @@ func (c *Configuration) resolveDefaults() {
 			// 3 is totally arbitrary
 			rule.TimeoutKill = rule.TimeoutInt + 3
 		}
+
+		if rule.ChangeFailDebounce == 0 {
+			rule.ChangeFailDebounce = 1
+		}
+
+		if rule.ChangeSuccessDebounce == 0 {
+			rule.ChangeSuccessDebounce = 1
+		}
 	}
 	c.ruleDefaults = nil
 }
@@ -332,5 +358,13 @@ func (c *Configuration) mapDefaults(dst *Rule, src Rule) {
 
 	if dst.TimeoutInt == 0 {
 		dst.TimeoutInt = src.TimeoutInt
+	}
+
+	if dst.ChangeFailDebounce == 0 {
+		dst.ChangeFailDebounce = src.ChangeFailDebounce
+	}
+
+	if dst.ChangeSuccessDebounce == 0 {
+		dst.ChangeSuccessDebounce = src.ChangeSuccessDebounce
 	}
 }
