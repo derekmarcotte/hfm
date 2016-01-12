@@ -157,7 +157,7 @@ func TestDriverChangeFail(t *testing.T) {
 
 	exists := true
 
-	cfg := `status=run-once; test="false"; change_fail="rm"; change_success_arguments = "` + f.Name() + `"`
+	cfg := `status=run-once; test="false"; change_fail="rm"; change_fail_arguments = "` + f.Name() + `"`
 
 	c.SetConfiguration(cfg)
 
