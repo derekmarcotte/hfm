@@ -201,6 +201,7 @@ func (rd *RuleDriver) Run() {
 	timeoutKill := time.Duration(rd.Rule.TimeoutKill * float64(time.Second))
 
 	interval := time.Duration(rd.Rule.Interval * float64(time.Second))
+	intervalFail := time.Duration(rd.Rule.IntervalFail * float64(time.Second))
 
 	for rd.Rule.Status != RuleStatusDisabled {
 		start := time.Now()
@@ -217,8 +218,15 @@ func (rd *RuleDriver) Run() {
 
 		cases := make([]reflect.SelectCase, 3)
 		cases[0] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(cmdDone)}
-		cases[1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(timeoutKill))}
-		cases[2] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(timeoutInt))}
+
+		if timeoutKill > 0 && timeoutInt > 0 {
+			cases[1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(timeoutKill))}
+			cases[2] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(timeoutInt))}
+		} else if timeoutKill > 0 {
+			cases[1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(timeoutKill))}
+		} else if timeoutInt > 0 {
+			cases[1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(timeoutInt))}
+		}
 
 		if err := cmd.Start(); err != nil {
 			log.Error("'%s' %s failed to start: %v", rd.Rule.Name, rd.GetRunUid(), err)
@@ -238,7 +246,11 @@ func (rd *RuleDriver) Run() {
 			case 0:
 				rd.handleCmdDone(value)
 			case 1:
-				rd.handleCmdKillTimeout(cmd)
+				if timeoutKill > 0 {
+					rd.handleCmdKillTimeout(cmd)
+				} else {
+					rd.handleCmdIntTimeout(cmd)
+				}
 			case 2:
 				rd.handleCmdIntTimeout(cmd)
 			}
@@ -269,6 +281,9 @@ func (rd *RuleDriver) Run() {
 		 *   although tests will not execute on exactly interval
 		 */
 		next := interval - time.Since(start)
+		if rd.Rule.LastState == RuleStateFail {
+			next = intervalFail - time.Since(start)
+		}
 		if rd.Rule.Status != RuleStatusDisabled && next > 0 {
 			time.Sleep(next)
 		}
