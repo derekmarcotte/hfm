@@ -198,12 +198,6 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 				rule.Status = RuleStatusEnabled
 			case "disabled":
 				rule.Status = RuleStatusDisabled
-			case "run-once":
-				rule.Status = RuleStatusRunOnce
-			case "run-once-fail":
-				rule.Status = RuleStatusRunOnceFail
-			case "run-once-sucess":
-				rule.Status = RuleStatusRunOnceSuccess
 			case "always-fail":
 				rule.Status = RuleStatusAlwaysFail
 			case "always-success":
@@ -279,6 +273,17 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 			case "change_success_arguments":
 				rule.ChangeSuccessArguments = tmp
 			}
+		case "runs":
+			if c.Type() != libucl.ObjectTypeInt {
+				return errors.New(fmt.Sprintf("%s: '%s' must be an integer type, got type %v", name, field, c.Type()))
+			}
+
+			tmp := c.ToInt()
+			if tmp < 0 || tmp > 65535 {
+				return errors.New(fmt.Sprintf("%s: '%s' must be in 0..65535", name, field))
+			}
+
+			rule.Runs = uint16(tmp)
 		case "change_fail_debounce", "change_success_debounce":
 			if c.Type() != libucl.ObjectTypeInt {
 				return errors.New(fmt.Sprintf("%s: '%s' must be an integer type, got type %v", name, field, c.Type()))
@@ -310,12 +315,12 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 func (c *Configuration) resolveDefaults() {
 	for _, rule := range c.Rules {
 		if g, ok := c.ruleDefaults[rule.GroupName]; ok {
-			c.mapDefaults(rule, *g)
+			c.inheritValues(rule, *g)
 
 			if d, ok := c.ruleDefaults[g.GroupName]; ok {
 				// map the root/default rules before applying the
 				// group rules
-				c.mapDefaults(rule, *d)
+				c.inheritValues(rule, *d)
 			}
 		}
 
@@ -339,9 +344,13 @@ func (c *Configuration) resolveDefaults() {
 	c.ruleDefaults = nil
 }
 
-func (c *Configuration) mapDefaults(dst *Rule, src Rule) {
+func (c *Configuration) inheritValues(dst *Rule, src Rule) {
 	if dst.Status == RuleStatusUnset {
 		dst.Status = src.Status
+	}
+
+	if dst.Runs == 0 {
+		dst.Runs = src.Runs
 	}
 
 	if dst.Interval == 0 {

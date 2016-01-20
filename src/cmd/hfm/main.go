@@ -153,7 +153,7 @@ func main() {
 	ruleDone := make(chan *RuleDriver)
 
 	/* close enough for most applications */
-	appInstance := time.Now().UnixNano() - HFM_EPOCH
+	appInstance := uint64(time.Now().UnixNano()) - HFM_EPOCH
 
 	log.Info("Loaded %d rules.", len(config.Rules))
 	log.Debug("%d goroutines - before main dispatch loop.", runtime.NumGoroutine())

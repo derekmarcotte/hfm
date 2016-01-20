@@ -75,6 +75,10 @@ func matchesInherited(r Rule, e Rule) error {
 		return errors.New("Status")
 	}
 
+	if r.Runs != e.Runs {
+		return errors.New("Runs")
+	}
+
 	if r.Interval != e.Interval {
 		return errors.New("Interval")
 	}
@@ -171,9 +175,10 @@ func TestConfigGroup(t *testing.T) {
 func TestConfigInheritedFromDefault(t *testing.T) {
 	var c Configuration
 	var rule *Rule
-	exp := Rule{Status: RuleStatusRunOnce, Interval: 2, IntervalFail: 3, TimeoutInt: 4, StartDelay: 5, TimeoutKill: 7, ChangeFailDebounce: 6, ChangeSuccessDebounce: 7}
+	exp := Rule{Status: RuleStatusAlwaysFail, Runs: 1, Interval: 2, IntervalFail: 3, TimeoutInt: 4, StartDelay: 5, TimeoutKill: 7, ChangeFailDebounce: 6, ChangeSuccessDebounce: 7}
 	cfg := `
-status=run-once
+status=always-fail
+runs=1
 interval=2
 fail_interval=3
 timeout_int=4
@@ -206,9 +211,10 @@ r1 {
 func TestConfigMultipleInherited(t *testing.T) {
 	var c Configuration
 	var rule *Rule
-	exp := Rule{Status: RuleStatusRunOnce, Interval: 5, IntervalFail: 6, TimeoutInt: 7, StartDelay: 8, TimeoutKill: 10, ChangeFailDebounce: 9, ChangeSuccessDebounce: 10}
+	exp := Rule{Status: RuleStatusAlwaysFail, Runs: 1, Interval: 5, IntervalFail: 6, TimeoutInt: 7, StartDelay: 8, TimeoutKill: 10, ChangeFailDebounce: 9, ChangeSuccessDebounce: 10}
 	cfg := `
-status=run-once
+status=always-fail
+runs=1
 interval=2
 fail_interval=3
 timeout_int=4

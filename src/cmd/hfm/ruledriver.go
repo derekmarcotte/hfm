@@ -48,8 +48,8 @@ type RuleDriver struct {
 	Rule        Rule
 	Done        chan *RuleDriver
 	Last        ExitRecord
-	AppInstance int64
-	count       int64
+	AppInstance uint64
+	count       uint64
 }
 
 func (rd *RuleDriver) resetLast() {
@@ -145,7 +145,7 @@ func (rd *RuleDriver) handleStateChange(newState RuleStateType) {
 func (rd *RuleDriver) updateRuleState() {
 	newState := RuleStateSuccess
 	switch {
-	case rd.Last.Error != nil, rd.Last.ExitStatus != 0, rd.Rule.Status == RuleStatusRunOnceFail, rd.Rule.Status == RuleStatusAlwaysFail:
+	case rd.Last.Error != nil, rd.Last.ExitStatus != 0, rd.Rule.Status == RuleStatusAlwaysFail:
 		if rd.Rule.Status != RuleStatusAlwaysSuccess {
 			newState = RuleStateFail
 		}
@@ -153,8 +153,26 @@ func (rd *RuleDriver) updateRuleState() {
 
 	/* if the state has changed, or is an Always */
 	switch {
-	case rd.Rule.LastState != newState, rd.Rule.Status == RuleStatusAlwaysFail, rd.Rule.Status == RuleStatusAlwaysSuccess:
+	case rd.Rule.LastState == RuleStateUnknown, rd.Rule.Status == RuleStatusAlwaysFail, rd.Rule.Status == RuleStatusAlwaysSuccess:
 		rd.handleStateChange(newState)
+	case rd.Rule.LastState != newState:
+		var delta int32
+		rd.Rule.ChangeDebounce++
+
+		if newState == RuleStateFail {
+			delta = int32(rd.Rule.ChangeFailDebounce) - int32(rd.Rule.ChangeDebounce)
+		} else {
+			delta = int32(rd.Rule.ChangeSuccessDebounce) - int32(rd.Rule.ChangeDebounce)
+		}
+
+		if delta <= 0 {
+			rd.Rule.ChangeDebounce = 0
+			rd.handleStateChange(newState)
+		} else {
+			log.Info("'%s' run %s debounced state change to %s, require %d more consecutive results", rd.Rule.Name, rd.GetRunUid(), newState, delta)
+		}
+	default:
+		rd.Rule.ChangeDebounce = 0
 	}
 }
 
@@ -167,8 +185,7 @@ func (rd *RuleDriver) GetRunUid() string {
 }
 
 func (rd *RuleDriver) updateRuleStatus() {
-	switch rd.Rule.Status {
-	case RuleStatusRunOnce, RuleStatusRunOnceFail, RuleStatusRunOnceSuccess:
+	if rd.Rule.Runs > 0 && rd.count >= uint64(rd.Rule.Runs) {
 		rd.Rule.Status = RuleStatusDisabled
 	}
 }
@@ -182,6 +199,8 @@ func (rd *RuleDriver) Run() {
 	// the code isnt't very readale otherwise
 	timeoutInt := time.Duration(rd.Rule.TimeoutInt * float64(time.Second))
 	timeoutKill := time.Duration(rd.Rule.TimeoutKill * float64(time.Second))
+
+	interval := time.Duration(rd.Rule.Interval * float64(time.Second))
 
 	for rd.Rule.Status != RuleStatusDisabled {
 		start := time.Now()
@@ -249,7 +268,7 @@ func (rd *RuleDriver) Run() {
 		 *   this is fairly cheap to implement
 		 *   although tests will not execute on exactly interval
 		 */
-		next := time.Duration(rd.Rule.Interval*float64(time.Second)) - rd.Last.ExecDuration
+		next := interval - time.Since(start)
 		if rd.Rule.Status != RuleStatusDisabled && next > 0 {
 			time.Sleep(next)
 		}

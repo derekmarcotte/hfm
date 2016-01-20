@@ -46,14 +46,6 @@ const (
 	/* a disabled service leaves the run-time configuration */
 	RuleStatusDisabled
 
-	/* run the rule once at startup, then disable the rule
-	 * helpful for failing over hosts, or services
-	 */
-	RuleStatusRunOnce
-	RuleStatusRunOnceFail
-	RuleStatusRunOnceSuccess
-
-	/* are these helpful, at all? */
 	RuleStatusAlwaysFail
 	RuleStatusAlwaysSuccess
 )
@@ -80,6 +72,11 @@ type Rule struct {
 	/* what is the period this task can run for, before killing it */
 	TimeoutInt  float64
 	TimeoutKill float64
+
+	/* total number of test runs, 0 for infinite, 1 + AlwaysFail is helpful
+	 * for administratively failing over hosts, for example
+	 */
+	Runs uint16
 
 	/* command to run to initiate test */
 	/*  hoping to extend to support go-native tests */
