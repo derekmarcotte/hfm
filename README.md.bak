@@ -10,7 +10,7 @@ the exec facility.
 
 In practice, the overhead of spawning a new process per test limits frequency
 that can be achieved by the tests, and their results.  Anecdotally, 5ms
-intervals have been seen to be achievable.
+intervals have been seen to be achieveable.
 
 An example application is to poll other network services for health, and to
 take actions based on their health status changes.
