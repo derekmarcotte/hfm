@@ -63,10 +63,6 @@ func matchesDefaults(r Rule) error {
 		return errors.New("IntervalFail")
 	}
 
-	if r.TimeoutKill != r.TimeoutInt+3 {
-		return errors.New("TimeoutKill")
-	}
-
 	return nil
 }
 
@@ -182,6 +178,7 @@ runs=1
 interval=2
 fail_interval=3
 timeout_int=4
+timeout_kill=7
 start_delay=5
 change_fail_debounce=6
 change_success_debounce=7
@@ -218,6 +215,7 @@ runs=1
 interval=2
 fail_interval=3
 timeout_int=4
+timeout_kill=7
 start_delay=5
 change_fail_debounce=6
 change_success_debounce=7
@@ -225,6 +223,7 @@ g1 {
 	interval=5
 	fail_interval=6
 	timeout_int=7
+	timeout_kill=10
 	start_delay=8
 	change_fail_debounce=9
 	change_success_debounce=10

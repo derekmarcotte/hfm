@@ -190,18 +190,43 @@ func (rd *RuleDriver) updateRuleStatus() {
 	}
 }
 
+func (rd *RuleDriver) buildCases(cmdDone *chan error, timeoutKill time.Duration) []reflect.SelectCase {
+
+	timeoutInt := time.Duration(rd.Rule.TimeoutInt * float64(time.Second))
+
+	count := 3
+	if timeoutKill == 0 {
+		count--
+	}
+	if timeoutInt == 0 {
+		count--
+	}
+
+	cases := make([]reflect.SelectCase, count)
+	cases[0] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(*cmdDone)}
+
+	if timeoutKill > 0 && timeoutInt > 0 {
+		cases[1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(timeoutKill))}
+		cases[2] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(timeoutInt))}
+	} else if timeoutKill > 0 {
+		cases[1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(timeoutKill))}
+	} else if timeoutInt > 0 {
+		cases[1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(timeoutInt))}
+	}
+
+	return cases
+}
+
 func (rd *RuleDriver) Run() {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
 	cmdDone := make(chan error)
 
-	// the code isnt't very readale otherwise
-	timeoutInt := time.Duration(rd.Rule.TimeoutInt * float64(time.Second))
-	timeoutKill := time.Duration(rd.Rule.TimeoutKill * float64(time.Second))
-
 	interval := time.Duration(rd.Rule.Interval * float64(time.Second))
 	intervalFail := time.Duration(rd.Rule.IntervalFail * float64(time.Second))
+
+	timeoutKill := time.Duration(rd.Rule.TimeoutKill * float64(time.Second))
 
 	for rd.Rule.Status != RuleStatusDisabled {
 		start := time.Now()
@@ -216,17 +241,7 @@ func (rd *RuleDriver) Run() {
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 
-		cases := make([]reflect.SelectCase, 3)
-		cases[0] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(cmdDone)}
-
-		if timeoutKill > 0 && timeoutInt > 0 {
-			cases[1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(timeoutKill))}
-			cases[2] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(timeoutInt))}
-		} else if timeoutKill > 0 {
-			cases[1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(timeoutKill))}
-		} else if timeoutInt > 0 {
-			cases[1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(timeoutInt))}
-		}
+		cases := rd.buildCases(&cmdDone, timeoutKill)
 
 		if err := cmd.Start(); err != nil {
 			log.Error("'%s' %s failed to start: %v", rd.Rule.Name, rd.GetRunUid(), err)

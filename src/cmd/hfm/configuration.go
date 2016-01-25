@@ -328,11 +328,6 @@ func (c *Configuration) resolveDefaults() {
 			rule.IntervalFail = rule.Interval
 		}
 
-		if rule.TimeoutKill == 0 {
-			// 3 is totally arbitrary
-			rule.TimeoutKill = rule.TimeoutInt + 3
-		}
-
 		if rule.ChangeFailDebounce == 0 {
 			rule.ChangeFailDebounce = 1
 		}
@@ -367,6 +362,10 @@ func (c *Configuration) inheritValues(dst *Rule, src Rule) {
 
 	if dst.TimeoutInt == 0 {
 		dst.TimeoutInt = src.TimeoutInt
+	}
+
+	if dst.TimeoutKill == 0 {
+		dst.TimeoutKill = src.TimeoutKill
 	}
 
 	if dst.ChangeFailDebounce == 0 {
