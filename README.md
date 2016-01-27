@@ -30,7 +30,7 @@ system, due to Coordinated Omission.
 
 ## Architecture
 
-![Architecture Diagram](doc/architecture.svg "hfm architecture")
+![Architecture Diagram](doc/architecture-90dpi.png "hfm architecture")
 
 The control loop spawns one rule driver per rule.  The driver takes care of all
 of the bookkeeping of the rule for its lifetime.  Each test is run as a 
