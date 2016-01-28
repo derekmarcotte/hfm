@@ -122,8 +122,7 @@ test1 would run every 2 seconds, while test2 would run every second.
 
 ### Configuration Values
 
-#### status (inheritable, enum, default: enabled)
-What the status of the rule is:
+#### status (inheritable, string-enum, default: enabled)
 
 - enabled  - This rule's test will run at the scheduled interval, the
   change\_fail or change\_success command will execute normally.
@@ -140,7 +139,7 @@ What the status of the rule is:
 
 #### test (string)
 The command to execute to preform a test.  The command must give an exit code
-not equal to 0 to indicate failure.
+equal to 0 to indicate success.
 
 #### test\_arguments (string, array of strings)
 Any parameters to pass to the test command as an argument.  An example
@@ -153,14 +152,43 @@ combination may be to run a config-file only shell command:
 Delay the initial run of this test by start\_delay.  This may help stagger the
 load of the tests.
 
-#### interval (inheritable, interval, default: 0)
-Interval to delay between subsequent starts of successful tests.  A value of 0
-means to run the next test immediately after execution of the current test.
+#### runs (inheritable, number, default: 0)
+Number of times to run a rule, before setting it to disabled.  This is helpful
+mainly for testing, although, if used in concert with status="always-fail", it
+would be useful to administratively force a fail script to run on reload.  For
+example:
 
-#### interval\_fail (inheritable, interval, default: interval)
-Interval to delay between subsequent starts of a test after a failed test.  A
-value of 0 means to run the next test immediately after execution of the
-current test.  This allows one to configure hfm to run failed tests less (or
+Changing a rule (or group) from:
+
+	rule {
+		test="check-host"
+		change_fail="down-host"
+		change_success="up-host"
+	}
+
+to:
+
+	rule {
+		runs=1
+		status="always-fail"
+		test="check-host"
+		change_fail="down-host"
+		change_success="up-host"
+	}
+
+will cause down-host to run exactly once on an hfm reload.
+
+#### interval (inheritable, interval, default: 0)
+Interval to delay between start of a test after the start of a successful test.
+A value of 0 means to preform the next run immediately after the current run.
+If a test takes longer to execute than "interval," then the next one will be
+run immediately.
+
+#### interval\_fail (inheritable, interval, default: 0)
+Interval to delay between start of a test after the start of a failed test.  A
+value of 0 means to preform the next run immediately after the current run.  If
+a test takes longer to execute than "interval," then the next one will be run
+immediately.  This allows one to configure hfm to run failed tests less (or
 more) aggressively than successful tests.
 
 #### timeout\_int (inheritable, interval, default: 0)
@@ -175,7 +203,7 @@ signal.  A value of 0 means a signal will not be sent.
 The command to execute to preform a when a previously failed (or unrun) test
 returns a success.
 
-#### change\_success\_debounce (inheritable, default: 1)
+#### change\_success\_debounce (inheritable, number, default: 1)
 The number of test runs that need to return successful from a previously failed
 run, before change\_success is run.  A value of 1 means that change\_success will
 run immediately.
@@ -191,7 +219,7 @@ example combination may be to run a config-file only shell command:
 The command to execute to preform a when a previously successful (or unrun)
 test returns a failure.
 
-#### change\_fail\_debounce (inheritable, default: 1)
+#### change\_fail\_debounce (inheritable, number, default: 1)
 The number of test runs that need to return failure from a previously
 successful run, before change\_fail is run.  A value of 1 means that change\_fail
 will run immediately.
