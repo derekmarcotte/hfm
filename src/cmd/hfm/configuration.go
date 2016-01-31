@@ -40,7 +40,19 @@ import "github.com/mitchellh/go-libucl"
 
 /* definitions */
 
-/* ConfigLevelType is how far we are nested into the config */
+// whether the following Rule fields were found when parsing the configuration
+type RuleFound struct {
+	Interval              bool
+	IntervalFail          bool
+	StartDelay            bool
+	TimeoutInt            bool
+	TimeoutKill           bool
+	Runs                  bool
+	ChangeFailDebounce    bool
+	ChangeSuccessDebounce bool
+}
+
+/* How far we are nested into the config */
 type ConfigLevelType int
 
 const (
@@ -49,92 +61,111 @@ const (
 	ConfigLevelRule
 )
 
+/* hfm configuration */
 type Configuration struct {
-	path         string
-	shell        string
-	Rules        map[string]*Rule
-	RulesOrder   []string
+	/* path to configuration file, may be empty */
+	path string
+
+	/* set of the rules parsed from the config, string maps to rule name */
+	Rules map[string]*Rule
+
+	/* the order that the rules were parsed in, so we can schedule in parse
+	 * order
+	 */
+	RulesOrder []string
+
+	/* our group rules before resolving inheritance, string maps to group
+	 * name
+	 */
 	ruleDefaults map[string]*Rule
+
+	/* whether a value was explicitly set for a parsed rule, string maps to
+	 * rule name
+	 */
+	ruleFinds map[string]*RuleFound
 }
 
 /* meat */
+
+/* set the configuration by a static string */
 func (c *Configuration) SetConfiguration(config string) error {
-	p := libucl.NewParser(0)
-	defer p.Close()
-
-	if e := p.AddString(config); e != nil {
-		return e
-	}
-
-	uclConfig := p.Object()
-	defer uclConfig.Close()
-
-	//fmt.Println(config.Emit(libucl.EmitConfig))
-	if e := c.walkConfiguration(uclConfig, "", ConfigLevelRoot); e != nil {
-		return e
-	}
-
-	c.resolveDefaults()
-
-	return nil
+	return c.startConfiguration(config, "string")
 }
 
+/* load and set the configuration from a file */
 func (c *Configuration) LoadConfiguration(path string) error {
+	return c.startConfiguration(path, "file")
+}
+
+func (c *Configuration) startConfiguration(config string, configType string) error {
+	var e error
+
+	/* get the ucl object */
 	p := libucl.NewParser(0)
 	defer p.Close()
 
-	if e := p.AddFile(path); e != nil {
+	switch configType {
+	case "string":
+		e = p.AddString(config)
+	default:
+		e = p.AddFile(config)
+	}
+
+	if e != nil {
 		return e
 	}
 
 	uclConfig := p.Object()
 	defer uclConfig.Close()
 
-	//fmt.Println(config.Emit(libucl.EmitConfig))
-	if e := c.walkConfiguration(uclConfig, "", ConfigLevelRoot); e != nil {
-		return e
-	}
-
-	c.resolveDefaults()
-
-	return nil
+	/* use it to populate myself as a valid hfm object */
+	return c.walkConfiguration(uclConfig, "", ConfigLevelRoot)
 }
 
-/* config format:
- *  default
- *  group
- *    rule
- *  group
- *    rule
- *    rule
- *  rule
- *  default
+/* figure out what this element's name should be */
+func (config *Configuration) buildName(uclConfig *libucl.Object, parentRule string, depth ConfigLevelType) (string, error) {
+	if depth == ConfigLevelRoot {
+		return "default", nil
+	}
+
+	var err error
+	var name string
+
+	if parentRule == "default" {
+		name = uclConfig.Key()
+	} else {
+		name = parentRule + "/" + uclConfig.Key()
+	}
+
+	err = nil
+	if name == "" {
+		err = errors.New("Rule is missing a name.")
+	} else if _, ok := config.Rules[name]; ok {
+		err = fmt.Errorf("%s: name has been used already", name)
+	} else if _, ok := config.ruleDefaults[name]; ok {
+		err = fmt.Errorf("%s: name has been used by a group already", name)
+	}
+
+	return name, err
+}
+
+/* recursively walk the ucl configuration, populating an hfm Configuration
+ * instance
  */
 func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentRule string, depth ConfigLevelType) error {
-	var name string
+
 	if depth == ConfigLevelRoot {
-		name = "default"
+		config.ruleFinds = make(map[string]*RuleFound)
 		config.ruleDefaults = make(map[string]*Rule)
 		config.Rules = make(map[string]*Rule)
-	} else {
-		if parentRule == "default" {
-			name = uclConfig.Key()
-		} else {
-			name = parentRule + "/" + uclConfig.Key()
-		}
 	}
 
-	if name == "" {
-		return errors.New("Rule is missing a name.")
-	} else if _, ok := config.Rules[name]; ok {
-		return errors.New(fmt.Sprintf("%s: name has been used already", name))
-	} else if _, ok := config.ruleDefaults[name]; ok {
-		return errors.New(fmt.Sprintf("%s: name has been used by a group already", name))
+	name, err := config.buildName(uclConfig, parentRule, depth)
+	if err != nil {
+		return err
 	}
 
 	var nextDepth ConfigLevelType
-	tabs := 0
-	var _ = tabs
 
 	/* all actual rules have a test, defaults do not */
 	isRule := (uclConfig.Get("test") != nil)
@@ -144,26 +175,21 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 		nextDepth = ConfigLevelGroup
 	case ConfigLevelGroup:
 		nextDepth = ConfigLevelRule
-		tabs = 1
 	case ConfigLevelRule:
 		if !isRule {
-			return errors.New(fmt.Sprintf("%s: a 'test' value must exist for rules", name))
+			return fmt.Errorf("%s: a 'test' value must exist for rules", name)
 		}
-		tabs = 2
 	}
 
+	var ruleFound RuleFound
 	rule := Rule{Name: name, GroupName: parentRule}
-	if rule.Name == "default" {
-		rule.Interval = 1
-		rule.TimeoutInt = 1
-		rule.Status = RuleStatusEnabled
-	}
 
 	if !isRule {
 		config.ruleDefaults[name] = &rule
 	} else {
 		config.Rules[name] = &rule
 		config.RulesOrder = append(config.RulesOrder, name)
+		config.ruleFinds[name] = &ruleFound
 	}
 
 	i := uclConfig.Iterate(true)
@@ -176,21 +202,18 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 		if c.Type() == libucl.ObjectTypeObject {
 			/* if we are a rule, we stop parsing children */
 			if depth != ConfigLevelRule || !isRule {
-				//fmt.Printf("%s%v: \n", strings.Repeat("\t", tabs), c.Key())
 				config.walkConfiguration(c, name, nextDepth)
 			} else {
-				return errors.New(fmt.Sprintf("%s: '%s' rules cannot contain child rules", name, field))
+				return fmt.Errorf("%s: '%s' rules cannot contain child rules", name, field)
 			}
 
 			continue
 		}
 
-		//fmt.Printf("%s%+v\t%v\n", strings.Repeat("\t", tabs), c.Key(), c.Type())
-
 		switch field {
 		case "status":
 			if c.Type() != libucl.ObjectTypeString {
-				return errors.New(fmt.Sprintf("%s: '%s' must be a string type, got type %v", name, field, c.Type()))
+				return fmt.Errorf("%s: '%s' must be a string type, got type %v", name, field, c.Type())
 			}
 
 			switch strings.ToLower(c.ToString()) {
@@ -203,7 +226,7 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 			case "always-success":
 				rule.Status = RuleStatusAlwaysSuccess
 			default:
-				return errors.New(fmt.Sprintf("%s: '%s' does not contain a valid string", name, field))
+				return fmt.Errorf("%s: '%s' does not contain a valid string", name, field)
 			}
 		case "start_delay", "interval", "fail_interval", "timeout_int", "timeout_kill":
 			tmp := 0.0
@@ -212,25 +235,30 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 			case libucl.ObjectTypeInt, libucl.ObjectTypeFloat, libucl.ObjectTypeTime:
 				tmp = c.ToFloat()
 			default:
-				return errors.New(fmt.Sprintf("%s: '%s' must be a valid numeric type, got type %v", name, field, c.Type()))
+				return fmt.Errorf("%s: '%s' must be a valid numeric type, got type %v", name, field, c.Type())
 			}
 
 			switch field {
 			case "start_delay":
 				rule.StartDelay = tmp
+				ruleFound.StartDelay = true
 			case "interval":
 				rule.Interval = tmp
+				ruleFound.Interval = true
 			case "fail_interval":
 				rule.IntervalFail = tmp
+				ruleFound.IntervalFail = true
 			case "timeout_int":
 				rule.TimeoutInt = tmp
+				ruleFound.TimeoutInt = true
 			case "timeout_kill":
 				rule.TimeoutKill = tmp
+				ruleFound.TimeoutKill = true
 			}
 		case "test", "change_fail", "change_success":
 			/* command fields */
 			if c.Type() != libucl.ObjectTypeString {
-				return errors.New(fmt.Sprintf("%s: '%s' must be a string type, got type %v", name, field, c.Type()))
+				return fmt.Errorf("%s: '%s' must be a string type, got type %v", name, field, c.Type())
 			}
 
 			tmp := c.ToString()
@@ -255,14 +283,14 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 					defer arg.Close()
 
 					if arg.Type() != libucl.ObjectTypeString {
-						return errors.New(fmt.Sprintf("%s: '%s' must contain only string elements, got type %v", name, field, arg.Type()))
+						return fmt.Errorf("%s: '%s' must contain only string elements, got type %v", name, field, arg.Type())
 					}
 
 					tmp = append(tmp, arg.ToString())
 				}
 
 			} else {
-				return errors.New(fmt.Sprintf("%s: '%s' must be a string or an array of strings, got type %v", name, field, c.Type()))
+				return fmt.Errorf("%s: '%s' must be a string or an array of strings, got type %v", name, field, c.Type())
 			}
 
 			switch field {
@@ -275,104 +303,138 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 			}
 		case "runs":
 			if c.Type() != libucl.ObjectTypeInt {
-				return errors.New(fmt.Sprintf("%s: '%s' must be an integer type, got type %v", name, field, c.Type()))
+				return fmt.Errorf("%s: '%s' must be an integer type, got type %v", name, field, c.Type())
 			}
 
 			tmp := c.ToInt()
 			if tmp < 0 || tmp > 65535 {
-				return errors.New(fmt.Sprintf("%s: '%s' must be in 0..65535", name, field))
+				return fmt.Errorf("%s: '%s' must be in 0..65535", name, field)
 			}
 
 			rule.Runs = uint16(tmp)
+			ruleFound.Runs = true
 		case "change_fail_debounce", "change_success_debounce":
 			if c.Type() != libucl.ObjectTypeInt {
-				return errors.New(fmt.Sprintf("%s: '%s' must be an integer type, got type %v", name, field, c.Type()))
+				return fmt.Errorf("%s: '%s' must be an integer type, got type %v", name, field, c.Type())
 			}
 
 			tmp := c.ToInt()
 
 			if tmp < 1 || tmp > 65535 {
-				return errors.New(fmt.Sprintf("%s: '%s' must be in 1..65535", name, field))
+				return fmt.Errorf("%s: '%s' must be in 1..65535", name, field)
 			}
 
 			switch field {
 			case "change_fail_debounce":
 				rule.ChangeFailDebounce = uint16(tmp)
+				ruleFound.ChangeFailDebounce = true
 			case "change_success_debounce":
 				rule.ChangeSuccessDebounce = uint16(tmp)
+				ruleFound.ChangeSuccessDebounce = true
 			}
 
 		default:
-			//fmt.Printf("%s%+v\n", strings.Repeat("\t", tabs), c)
-			return errors.New(fmt.Sprintf("%s: '%s' unrecognized property", name, c.Key()))
+			return fmt.Errorf("%s: '%s' unrecognized property", name, c.Key())
 		}
 	}
 
-	//fmt.Printf("%s%+v\n", strings.Repeat("\t", tabs), rule)
+	if depth == ConfigLevelRoot {
+		config.resolveDefaults()
+	}
+
 	return nil
 }
 
+/* take our set of raw parsed rules, and apply the group and root inherited,
+ * and initial values
+ */
 func (c *Configuration) resolveDefaults() {
-	for _, rule := range c.Rules {
-		if g, ok := c.ruleDefaults[rule.GroupName]; ok {
-			c.inheritValues(rule, *g)
+	var f RuleFound
 
+	for _, rule := range c.Rules {
+		if tmp, ok := c.ruleFinds[rule.Name]; ok {
+			f = *tmp
+		} else {
+			f = RuleFound{}
+		}
+
+		/* inherit group first */
+		if g, ok := c.ruleDefaults[rule.GroupName]; ok {
+			c.inheritValues(rule, *g, &f)
+
+			/* inherit root next */
 			if d, ok := c.ruleDefaults[g.GroupName]; ok {
-				// map the root/default rules before applying the
-				// group rules
-				c.inheritValues(rule, *d)
+				c.inheritValues(rule, *d, &f)
 			}
 		}
 
-		if rule.IntervalFail == 0 {
+		if rule.Status == RuleStatusUnset {
+			rule.Status = RuleStatusEnabled
+		}
+
+		/* properties that likely should be non-zero after defaults
+		 * applied
+		 */
+		if !f.IntervalFail && rule.IntervalFail == 0 {
 			rule.IntervalFail = rule.Interval
 		}
 
-		if rule.ChangeFailDebounce == 0 {
+		/* these must be greater than zero */
+		if !f.ChangeFailDebounce && rule.ChangeFailDebounce == 0 {
 			rule.ChangeFailDebounce = 1
 		}
 
-		if rule.ChangeSuccessDebounce == 0 {
+		if !f.ChangeSuccessDebounce && rule.ChangeSuccessDebounce == 0 {
 			rule.ChangeSuccessDebounce = 1
 		}
 	}
+
+	/* we don't need this book keeping around after this step */
 	c.ruleDefaults = nil
+	c.ruleFinds = nil
 }
 
-func (c *Configuration) inheritValues(dst *Rule, src Rule) {
+/* apply inherited values to fields that haven't been explicitly set */
+func (c *Configuration) inheritValues(dst *Rule, src Rule, f *RuleFound) {
 	if dst.Status == RuleStatusUnset {
 		dst.Status = src.Status
 	}
 
-	if dst.Runs == 0 {
+	/* we need to check for 0s here, as they may have been set by the
+	 * group, and now we are in the root context
+	 */
+
+	//fmt.Printf("%s: %+v\n", dst.Name, *f)
+
+	if !f.Runs && dst.Runs == 0 {
 		dst.Runs = src.Runs
 	}
 
-	if dst.Interval == 0 {
+	if !f.Interval && dst.Interval == 0 {
 		dst.Interval = src.Interval
 	}
 
-	if dst.IntervalFail == 0 {
+	if !f.IntervalFail && dst.IntervalFail == 0 {
 		dst.IntervalFail = src.IntervalFail
 	}
 
-	if dst.StartDelay == 0 {
+	if !f.StartDelay && dst.StartDelay == 0 {
 		dst.StartDelay = src.StartDelay
 	}
 
-	if dst.TimeoutInt == 0 {
+	if !f.TimeoutInt && dst.TimeoutInt == 0 {
 		dst.TimeoutInt = src.TimeoutInt
 	}
 
-	if dst.TimeoutKill == 0 {
+	if !f.TimeoutKill && dst.TimeoutKill == 0 {
 		dst.TimeoutKill = src.TimeoutKill
 	}
 
-	if dst.ChangeFailDebounce == 0 {
+	if !f.ChangeFailDebounce && dst.ChangeFailDebounce == 0 {
 		dst.ChangeFailDebounce = src.ChangeFailDebounce
 	}
 
-	if dst.ChangeSuccessDebounce == 0 {
+	if !f.ChangeSuccessDebounce && dst.ChangeSuccessDebounce == 0 {
 		dst.ChangeSuccessDebounce = src.ChangeSuccessDebounce
 	}
 }

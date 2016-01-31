@@ -184,12 +184,6 @@ func (rd *RuleDriver) GetRunUid() string {
 	}
 }
 
-func (rd *RuleDriver) updateRuleStatus() {
-	if rd.Rule.Runs > 0 && rd.count >= uint64(rd.Rule.Runs) {
-		rd.Rule.Status = RuleStatusDisabled
-	}
-}
-
 func (rd *RuleDriver) buildCases(cmdDone *chan error, timeoutKill time.Duration) []reflect.SelectCase {
 
 	timeoutInt := time.Duration(rd.Rule.TimeoutInt * float64(time.Second))
@@ -286,7 +280,9 @@ func (rd *RuleDriver) Run() {
 
 		rd.updateRuleState()
 
-		rd.updateRuleStatus()
+		if rd.Rule.Runs > 0 && rd.count >= uint64(rd.Rule.Runs) {
+			rd.Rule.Status = RuleStatusDisabled
+		}
 
 		/* I don't think we should allow back-log
 		 *   if the test takes longer than the interval

@@ -35,14 +35,6 @@ import (
 )
 
 func matchesInitial(r Rule) error {
-	if r.Interval != 1 {
-		return errors.New("Interval")
-	}
-
-	if r.TimeoutInt != 1 {
-		return errors.New("TimeoutInt")
-	}
-
 	if r.Status != RuleStatusEnabled {
 		return errors.New("Status")
 	}
@@ -251,10 +243,64 @@ g1 {
 	//fmt.Printf("%+v\n", *rule)
 }
 
+func TestConfigMultipleInheritedZero(t *testing.T) {
+	var c Configuration
+	var rule *Rule
+	exp := Rule{Status: RuleStatusAlwaysFail, Runs: 0, Interval: 0, IntervalFail: 0, TimeoutInt: 0, StartDelay: 0, TimeoutKill: 0, ChangeFailDebounce: 1, ChangeSuccessDebounce: 1}
+	cfg := `
+status=always-fail
+runs=1
+interval=2
+fail_interval=3
+timeout_int=4
+timeout_kill=7
+start_delay=5
+change_fail_debounce=6
+change_success_debounce=7
+g1 {
+	interval=5
+	fail_interval=6
+	timeout_int=7
+	timeout_kill=10
+	start_delay=8
+	change_fail_debounce=9
+	change_success_debounce=10
+	r1 {
+		runs=0
+		interval=0
+		fail_interval=0
+		timeout_int=0
+		timeout_kill=0
+		start_delay=0
+		change_fail_debounce=1
+		change_success_debounce=1
+		test="true"
+	}
+}`
+
+	if e := c.SetConfiguration(cfg); e != nil {
+		t.Errorf("Received error for basic config: %v", e)
+	}
+
+	if len(c.Rules) != 1 {
+		t.Errorf("Received unexpected number of rules: %d", len(c.Rules))
+	}
+
+	rule, ok := c.Rules["g1/r1"]
+	if !ok || rule.Test != "true" {
+		t.Errorf("Received unexpected rule: %+v", *rule)
+	}
+
+	if e := matchesInherited(*rule, exp); e != nil {
+		t.Errorf("Rule didn't match expected value for '%s': %+v", e, rule)
+	}
+	//fmt.Printf("%+v\n", *rule)
+}
+
 func TestConfigGroupMultiple(t *testing.T) {
 	var c Configuration
 	var rule *Rule
-	cfg := `g1 { r1 { test="true" } r2 { test="false" } } `
+	cfg := `g1 { r1 { test="true" } r2 { test="false" } }`
 
 	if e := c.SetConfiguration(cfg); e != nil {
 		t.Errorf("Received error for basic config: %v", e)
