@@ -91,18 +91,18 @@ func (rd *RuleDriver) handleCmdKillTimeout(cmd *exec.Cmd) {
 /* process any output produced by the command, get buffers ready for next run */
 func (rd *RuleDriver) handleCmdBuffers(stdout *bytes.Buffer, stderr *bytes.Buffer) {
 	if stdout.Len() > 0 {
-		log.Info("'%s' run %s test produced output: %v", rd.Rule.Name, rd.GetRunUid(), stdout.String())
+		log.Info("'%s' run %s test produced output: %v", rd.Rule.Name, rd.GetRunUid(), stdout)
 	}
 	stdout.Reset()
 
 	if stderr.Len() > 0 {
-		log.Error("'%s' run %s test produced error output: %v", rd.Rule.Name, rd.GetRunUid(), stderr.String())
+		log.Error("'%s' run %s test produced error output: %v", rd.Rule.Name, rd.GetRunUid(), stderr)
 	}
 	stderr.Reset()
 }
 
 func (rd *RuleDriver) handleStateChange(newState RuleStateType) {
-	log.Warning("'%s' run %s changed state to: %v", rd.Rule.Name, rd.GetRunUid(), newState.String())
+	log.Warning("'%s' run %s changed state to: %v", rd.Rule.Name, rd.GetRunUid(), newState)
 	rd.Rule.LastState = newState
 
 	var changeCmd string
@@ -131,10 +131,10 @@ func (rd *RuleDriver) handleStateChange(newState RuleStateType) {
 		cmd.Run()
 
 		if stdout.Len() > 0 {
-			log.Info("'%s' run %s change command produced output: %v", rd.Rule.Name, rd.GetRunUid(), stdout.String())
+			log.Info("'%s' run %s change command produced output: %v", rd.Rule.Name, rd.GetRunUid(), stdout)
 		}
 		if stderr.Len() > 0 {
-			log.Error("'%s' run %s change command produced error output: %v", rd.Rule.Name, rd.GetRunUid(), stderr.String())
+			log.Error("'%s' run %s change command produced error output: %v", rd.Rule.Name, rd.GetRunUid(), stderr)
 		}
 	}(changeCmd, args)
 }
@@ -169,7 +169,7 @@ func (rd *RuleDriver) updateRuleState() {
 			rd.Rule.ChangeDebounce = 0
 			rd.handleStateChange(newState)
 		} else {
-			log.Info("'%s' run %s debounced state change to %s, require %d more consecutive results", rd.Rule.Name, rd.GetRunUid(), newState.String(), delta)
+			log.Info("'%s' run %s debounced state change to %s, require %d more consecutive results", rd.Rule.Name, rd.GetRunUid(), newState, delta)
 		}
 	default:
 		rd.Rule.ChangeDebounce = 0

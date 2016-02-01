@@ -139,7 +139,9 @@ test1 would run every 2 seconds, while test2 would run every second.
 
 #### test (string)
 The command to execute to preform a test.  The command must give an exit code
-equal to 0 to indicate success.
+equal to 0 to indicate success.  If the call to os.Exec fails (for example, the
+command specified could not be found), the rule becomes disabled, and no state
+change event occurs.
 
 #### test\_arguments (string, array of strings)
 Any parameters to pass to the test command as an argument.  An example
