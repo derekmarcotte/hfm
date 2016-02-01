@@ -26,6 +26,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+//go:generate stringer -type=RuleStatusType -type=RuleStateType rule.go
+
 package main
 
 /* definitions */

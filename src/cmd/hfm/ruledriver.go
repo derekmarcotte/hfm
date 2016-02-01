@@ -102,7 +102,7 @@ func (rd *RuleDriver) handleCmdBuffers(stdout *bytes.Buffer, stderr *bytes.Buffe
 }
 
 func (rd *RuleDriver) handleStateChange(newState RuleStateType) {
-	log.Warning("'%s' run %s changed state to: %v", rd.Rule.Name, rd.GetRunUid(), newState)
+	log.Warning("'%s' run %s changed state to: %v", rd.Rule.Name, rd.GetRunUid(), newState.String())
 	rd.Rule.LastState = newState
 
 	var changeCmd string
@@ -169,7 +169,7 @@ func (rd *RuleDriver) updateRuleState() {
 			rd.Rule.ChangeDebounce = 0
 			rd.handleStateChange(newState)
 		} else {
-			log.Info("'%s' run %s debounced state change to %s, require %d more consecutive results", rd.Rule.Name, rd.GetRunUid(), newState, delta)
+			log.Info("'%s' run %s debounced state change to %s, require %d more consecutive results", rd.Rule.Name, rd.GetRunUid(), newState.String(), delta)
 		}
 	default:
 		rd.Rule.ChangeDebounce = 0
@@ -238,7 +238,9 @@ func (rd *RuleDriver) Run() {
 		cases := rd.buildCases(&cmdDone, timeoutKill)
 
 		if err := cmd.Start(); err != nil {
-			log.Error("'%s' %s failed to start: %v", rd.Rule.Name, rd.GetRunUid(), err)
+			rd.Rule.Status = RuleStatusDisabled
+			log.Error("'%s' %s failed to start, disabling: %v", rd.Rule.Name, rd.GetRunUid(), err)
+
 			rd.Done <- rd
 			return
 		}
@@ -281,6 +283,7 @@ func (rd *RuleDriver) Run() {
 		rd.updateRuleState()
 
 		if rd.Rule.Runs > 0 && rd.count >= uint64(rd.Rule.Runs) {
+			log.Debug("'%s' run %v, runs configured exceeded, disabling", rd.Rule.Name, rd.GetRunUid(), start)
 			rd.Rule.Status = RuleStatusDisabled
 		}
 
