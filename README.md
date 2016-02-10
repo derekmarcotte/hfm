@@ -1,4 +1,4 @@
-# hfm (High Frequency Monitor)
+# [hfm](https://github.com/derekmarcotte/hfm) (High Frequency Monitor)
 
 hfm is an application to run tests in parallel at a high frequency. If the
 outcome of the test results in a state change, other commands can be executed.
@@ -42,6 +42,11 @@ these child processes monitored.  [Debouncing](https://en.wikipedia.org/wiki/Deb
 the state change may help to alleviate this.
 
 ## Building
+
+hfm currently uses [gb](https://github.com/constabulary/gb) (verison 0.4.0 and
+up) to build.
+
+Try `make` for hints.
 
 There's a patch-local-go-libucl make target that will allow you to use the
 locally installed libucl vs. a vendorized version.
