@@ -1,5 +1,5 @@
-PREFIX?=/usr/local
-TAG=`git describe`
+PREFIX?=.
+TAG?=`git describe`
 
 help:
 	@echo "Targets:"
