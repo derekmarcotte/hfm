@@ -2,4 +2,4 @@
 /pkg/
 /vendor/pkg/
 /vendor/src/
-/etc/hfm-test.conf
+/examples/hfm-test.conf

@@ -54,12 +54,24 @@ type LogConfiguration struct {
 /* 2015-12-16, before initial post to github */
 const HFM_EPOCH = 1450224000000000000
 
+var build_prefix string
+var build_tag string
+
 /* meat */
 /* dependancy injection is for another day */
 var log = logging.MustGetLogger(getLogName())
 
 func getLogName() string {
 	return path.Base(os.Args[0])
+}
+
+func doVersion() {
+	tag := "untagged"
+	if build_tag != "" {
+		tag = build_tag
+	}
+
+	fmt.Printf("hfm version %s\n", tag)
 }
 
 func configureLogging(conf LogConfiguration) error {
@@ -135,10 +147,20 @@ func main() {
 
 	var lc LogConfiguration
 
-	flag.StringVar(&configPath, "config", "etc/hfm.conf", "Configuration file path")
+	if build_prefix != "" {
+		build_prefix = build_prefix + "/"
+	}
+
+	version := flag.Bool("v", false, "Print hfm version")
+	flag.StringVar(&configPath, "config", build_prefix+"etc/hfm.conf", "Configuration file path")
 	flag.StringVar(&lc.Where, "log", "stderr", "Where to log {stderr, syslog}")
 	flag.StringVar(&lc.Facility, "facility", "local0", "Log facility (when -log set to syslog) {local0-9, user, etc}")
 	flag.Parse()
+
+	if *version {
+		doVersion()
+		os.Exit(0)
+	}
 
 	if e := configureLogging(lc); e != nil {
 		fmt.Printf("Could not configure logging: %v", e)
