@@ -38,8 +38,9 @@ heavyweight OS process, which can limit the actual frequency that tests can run
 at.  Additionally, the state change commands are run as a heavyweight OS
 process, and are just spawned at the rate they are needed.  High-frequency
 state changes may become a problem, as the spawn rate is not throttled, nor are
-these child processes monitored.  [Debouncing](https://en.wikipedia.org/wiki/Debounce#Contact_bounce)
-the state change may help to alleviate this.
+these child processes monitored.
+[Debouncing](https://en.wikipedia.org/wiki/Debounce#Contact_bounce) the state
+change may help to alleviate this.
 
 ## Building
 
@@ -50,6 +51,15 @@ Try `make` for hints.
 
 There's a patch-local-go-libucl make target that will allow you to use the
 locally installed libucl vs. a vendorized version.
+
+There is a new repo for [packaging related
+updates](https://github.com/derekmarcotte/hfm-packaging).
+
+### FreeBSD
+
+A [FreeBSD
+port](https://github.com/derekmarcotte/hfm-packaging/tree/master/FreeBSD/sysutils/hfm)
+exists for hfm.  It has not yet been submitted for inclusion in the ports tree.
 
 # Configuration
 
@@ -69,8 +79,8 @@ Is a time period, measured in seconds by default.  See
 
 ## Configuration Format
 
-hfm uses libucl for its configuration, this allows a great amount of flexibility
-in the supported configuration syntax.
+hfm uses libucl for its configuration, this allows a great amount of
+flexibility in the supported configuration syntax.
 
 ### Layout
 
@@ -212,8 +222,8 @@ returns a success.
 
 #### change\_success\_debounce (inheritable, number, default: 1)
 The number of test runs that need to return successful from a previously failed
-run, before change\_success is run.  A value of 1 means that change\_success will
-run immediately.
+run, before change\_success is run.  A value of 1 means that change\_success
+will run immediately.
 
 #### change\_success\_arguments (string, array of strings)
 Any parameters to pass to the change\_success command as an argument.  An
@@ -228,8 +238,8 @@ test returns a failure.
 
 #### change\_fail\_debounce (inheritable, number, default: 1)
 The number of test runs that need to return failure from a previously
-successful run, before change\_fail is run.  A value of 1 means that change\_fail
-will run immediately.
+successful run, before change\_fail is run.  A value of 1 means that
+change\_fail will run immediately.
 
 #### change\_fail\_arguments (string, array of strings)
 Any parameters to pass to the change\_fail command as an argument.  An example
