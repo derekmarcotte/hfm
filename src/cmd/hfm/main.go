@@ -54,7 +54,7 @@ type LogConfiguration struct {
 /* 2015-12-16, before initial post to github */
 const HFM_EPOCH = 1450224000000000000
 
-var build_prefix string
+var build_etcdir string
 var build_tag string
 
 /* meat */
@@ -147,12 +147,8 @@ func main() {
 
 	var lc LogConfiguration
 
-	if build_prefix != "" {
-		build_prefix = build_prefix + "/"
-	}
-
 	version := flag.Bool("v", false, "Print hfm version")
-	flag.StringVar(&configPath, "config", build_prefix+"etc/hfm.conf", "Configuration file path")
+	flag.StringVar(&configPath, "config", build_etcdir+"/hfm.conf", "Configuration file path")
 	flag.StringVar(&lc.Where, "log", "stderr", "Where to log {stderr, syslog}")
 	flag.StringVar(&lc.Facility, "facility", "local0", "Log facility (when -log set to syslog) {local0-9, user, etc}")
 	flag.Parse()
@@ -163,12 +159,12 @@ func main() {
 	}
 
 	if e := configureLogging(lc); e != nil {
-		fmt.Printf("Could not configure logging: %v", e)
+		fmt.Printf("Could not configure logging: %v\n\n", e)
 		panic(e)
 	}
 
 	if e := config.LoadConfiguration(configPath); e != nil {
-		fmt.Printf("Could not load configuration file %v: %+v", configPath, e)
+		fmt.Printf("Could not load configuration file %v: %+v\n\n", configPath, e)
 		panic(e)
 	}
 
