@@ -18,7 +18,7 @@ clean:
 test: deps
 	gb test all -v
 
-patch-local-go-libucl: vendor/src/github.com/mitchellh
+patch-local-go-libucl: deps
 	git apply --check vendor/patches/github.com/mitchellh/go-libucl/libucl.go.patch
 	git apply vendor/patches/github.com/mitchellh/go-libucl/libucl.go.patch
 
