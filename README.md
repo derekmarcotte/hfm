@@ -60,7 +60,7 @@ updates](https://github.com/derekmarcotte/hfm-packaging).
 A [FreeBSD
 port](https://github.com/derekmarcotte/hfm-packaging/tree/master/FreeBSD/sysutils/hfm)
 exists for hfm.  It [has been
-submitted](https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=207392") for
+submitted](https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=207392) for
 inclusion in the ports tree.
 
 # Configuration
