@@ -1,4 +1,4 @@
-# [hfm](https://github.com/derekmarcotte/hfm) (High Frequency Monitor)
+# [hfm](https://github.com/derekmarcotte/hfm) (High Frequency Monitor) ![hfm mascot](doc/hfm-mascot.png)
 
 hfm is an application to run tests in parallel at a high frequency. If the
 outcome of the test results in a state change, other commands can be executed.
@@ -57,11 +57,8 @@ updates](https://github.com/derekmarcotte/hfm-packaging).
 
 ### FreeBSD
 
-A [FreeBSD
-port](https://github.com/derekmarcotte/hfm-packaging/tree/master/FreeBSD/sysutils/hfm)
-exists for hfm.  It [has been
-submitted](https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=207392) for
-inclusion in the ports tree.
+hfm is available in the ports tree as 
+[sysutils/hfm](http://www.freebsd.org/cgi/url.cgi?ports/sysutils/hfm/pkg-descr).
 
 # Configuration
 
@@ -89,51 +86,59 @@ flexibility in the supported configuration syntax.
 At the most complicated, there are two supported levels of grouping and
 inheritance available:
 
-	global
-	group {
-		test {
-		}
+```javascript
+global
+group {
+	test {
 	}
+}
+```
 
 A test could reside at any level of nesting, each is valid:
 
+```javascript
+test="true"
+```
+
+```javascript
+test1 {
 	test="true"
+}
+```
 
-.
-
+```javascript
+group1 {
 	test1 {
 		test="true"
 	}
-
-.
-
-	group1 {
-		test1 {
-			test="true"
-		}
-	}
+}
+```
 
 If a test is found at a depth, no child configurations are traversed:
 
-	group1 {
-		test="true"
-		test1 {
-			test="won't get here"
-		}
+```javascript
+group1 {
+	test="true"
+	test1 {
+		test="won't get here"
 	}
+}
+```
 
 Inheritable settings are passed down, closest to the test first:
 
-	interval=1s
-	group1 {
-		interval=2s
-		test1 {
-			test="true"
-		}
+```javascript
+interval=1s
+group1 {
+	interval=2s
+	test1 {
+		test="true"
 	}
-	test2 {
-			test="true"
-	}
+}
+test2 {
+		test="true"
+}
+```
 
 test1 would run every 2 seconds, while test2 would run every second.
 
@@ -164,8 +169,10 @@ change event occurs.
 Any parameters to pass to the test command as an argument.  An example
 combination may be to run a config-file only shell command:
 
-	test="/bin/sh"
-	test_arguments=["-c", "true; if $?; then false; fi" ]
+```javascript
+test="/bin/sh"
+test_arguments=["-c", "true; if $?; then false; fi" ]
+```
 
 #### start\_delay (inheritable, interval, default: 0)
 Delay the initial run of this test by start\_delay.  This may help stagger the
@@ -179,21 +186,25 @@ example:
 
 Changing a rule (or group) from:
 
-	rule {
-		test="check-host"
-		change_fail="down-host"
-		change_success="up-host"
-	}
+```javascript
+rule {
+	test="check-host"
+	change_fail="down-host"
+	change_success="up-host"
+}
+```
 
 to:
 
-	rule {
-		runs=1
-		status="always-fail"
-		test="check-host"
-		change_fail="down-host"
-		change_success="up-host"
-	}
+```javascript
+rule {
+	runs=1
+	status="always-fail"
+	test="check-host"
+	change_fail="down-host"
+	change_success="up-host"
+}
+```
 
 will cause down-host to run exactly once on an hfm reload.
 
@@ -231,8 +242,10 @@ will run immediately.
 Any parameters to pass to the change\_success command as an argument.  An
 example combination may be to run a config-file only shell command:
 
-	change_success="/bin/sh"
-	change_success_arguments=["-c", "true; if $?; then false; fi" ]
+```javascript
+change_success="/bin/sh"
+change_success_arguments=["-c", "true; if $?; then false; fi" ]
+```
 
 #### change\_fail (string)
 The command to execute to preform a when a previously successful (or unrun)
@@ -247,6 +260,7 @@ change\_fail will run immediately.
 Any parameters to pass to the change\_fail command as an argument.  An example
 combination may be to run a config-file only shell command:
 
-	change_fail="/bin/sh"
-	change_fail_arguments=["-c", "true; if $?; then false; fi" ]
-
+```javascript
+change_fail="/bin/sh"
+change_fail_arguments=["-c", "true; if $?; then false; fi" ]
+```
