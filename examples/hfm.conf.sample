@@ -11,10 +11,10 @@ lb1 {
 	status = "enabled"
 	interval = 1s
 	# matches test interval
-	# fail_interval = 
+	# interval_fail = 
 	haproxy {
 		interval = 200ms
-		fail_interval = 10s
+		interval_fail = 10s
 		test = "haproxy_test"
 		test_arguments = "10.2.1.251"
 		change_fail = "/bin/sh"
@@ -39,7 +39,7 @@ EOD
 	tinyproxy {
 		status = "disabled"
 		interval = 200ms
-		fail_interval = 10s
+		interval_fail = 10s
 		test = "tinyproxy_test"
 		test_arguments = "10.2.1.4"
 		change_fail = "/bin/sh"
@@ -57,7 +57,7 @@ EOD
 
 lb2 tinyproxy {
 	interval = 200ms
-	fail_interval = 10s
+	interval_fail = 10s
 	test = "tinyproxy_test"
 	test_arguments = "10.2.2.4"
 	change_fail = "/bin/sh"

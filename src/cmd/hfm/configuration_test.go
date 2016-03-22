@@ -168,7 +168,7 @@ func TestConfigInheritedFromDefault(t *testing.T) {
 status=always-fail
 runs=1
 interval=2
-fail_interval=3
+interval_fail=3
 timeout_int=4
 timeout_kill=7
 start_delay=5
@@ -205,7 +205,7 @@ func TestConfigMultipleInherited(t *testing.T) {
 status=always-fail
 runs=1
 interval=2
-fail_interval=3
+interval_fail=3
 timeout_int=4
 timeout_kill=7
 start_delay=5
@@ -213,7 +213,7 @@ change_fail_debounce=6
 change_success_debounce=7
 g1 {
 	interval=5
-	fail_interval=6
+	interval_fail=6
 	timeout_int=7
 	timeout_kill=10
 	start_delay=8
@@ -251,7 +251,7 @@ func TestConfigMultipleInheritedZero(t *testing.T) {
 status=always-fail
 runs=1
 interval=2
-fail_interval=3
+interval_fail=3
 timeout_int=4
 timeout_kill=7
 start_delay=5
@@ -259,7 +259,7 @@ change_fail_debounce=6
 change_success_debounce=7
 g1 {
 	interval=5
-	fail_interval=6
+	interval_fail=6
 	timeout_int=7
 	timeout_kill=10
 	start_delay=8
@@ -268,7 +268,7 @@ g1 {
 	r1 {
 		runs=0
 		interval=0
-		fail_interval=0
+		interval_fail=0
 		timeout_int=0
 		timeout_kill=0
 		start_delay=0

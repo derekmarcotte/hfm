@@ -148,6 +148,7 @@ func main() {
 	var lc LogConfiguration
 
 	version := flag.Bool("v", false, "Print hfm version")
+	testOnly := flag.Bool("n", false, "Print hfm version")
 	flag.StringVar(&configPath, "config", build_etcdir+"/hfm.conf", "Configuration file path")
 	flag.StringVar(&lc.Where, "log", "stderr", "Where to log {stderr, syslog}")
 	flag.StringVar(&lc.Facility, "facility", "local0", "Log facility (when -log set to syslog) {local0-9, user, etc}")
@@ -155,6 +156,14 @@ func main() {
 
 	if *version {
 		doVersion()
+		os.Exit(0)
+	}
+
+	if *testOnly {
+		if e := config.LoadConfiguration(configPath); e != nil {
+			fmt.Printf("Could not load configuration file %v: %+v\n\n", configPath, e)
+			os.Exit(1)
+		}
 		os.Exit(0)
 	}
 

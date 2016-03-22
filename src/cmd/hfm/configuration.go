@@ -228,7 +228,7 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 			default:
 				return fmt.Errorf("%s: '%s' does not contain a valid string", name, field)
 			}
-		case "start_delay", "interval", "fail_interval", "timeout_int", "timeout_kill":
+		case "start_delay", "interval", "interval_fail", "timeout_int", "timeout_kill":
 			tmp := 0.0
 			/* interval/duration fields */
 			switch c.Type() {
@@ -245,7 +245,7 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 			case "interval":
 				rule.Interval = tmp
 				ruleFound.Interval = true
-			case "fail_interval":
+			case "interval_fail":
 				rule.IntervalFail = tmp
 				ruleFound.IntervalFail = true
 			case "timeout_int":
