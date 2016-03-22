@@ -174,8 +174,12 @@ func TestDriverChangeFail(t *testing.T) {
 		t.Errorf("Expected exit status 1, recevied: %+v\n", driver.Last.ExitStatus)
 	}
 
-	/* give enough time for the async call to complete, 50ms is totally arbitrary */
-	d, _ := time.ParseDuration("50ms")
+	/* give enough time for the async call to complete:
+	 *  - 50ms was totally arbitrary starting point, failed on FreeBSD
+	 *    build cluster
+	 *  - 100ms is simply double that
+	 */
+	d, _ := time.ParseDuration("100ms")
 	time.Sleep(d)
 
 	if _, err := os.Stat(f.Name()); os.IsNotExist(err) {
@@ -219,8 +223,12 @@ change_success_arguments = "` + f.Name() + `"`
 		t.Errorf("Expected exit status 0, recevied: %+v\n", driver.Last.ExitStatus)
 	}
 
-	/* give enough time for the async call to complete, 50ms is totally arbitrary */
-	d, _ := time.ParseDuration("50ms")
+	/* give enough time for the async call to complete:
+	 *  - 50ms was totally arbitrary starting point, failed on FreeBSD
+	 *    build cluster
+	 *  - 100ms is simply double that
+	 */
+	d, _ := time.ParseDuration("100ms")
 	time.Sleep(d)
 
 	if _, err := os.Stat(f.Name()); os.IsNotExist(err) {
@@ -336,8 +344,12 @@ EOD
 		t.Errorf("Expected exit status 0, recevied: %+v\n", driver.Last.ExitStatus)
 	}
 
-	/* give enough time for the async call to complete, 50ms is totally arbitrary */
-	d, _ := time.ParseDuration("50ms")
+	/* give enough time for the async call to complete:
+	 *  - 50ms was totally arbitrary starting point, failed on FreeBSD
+	 *    build cluster
+	 *  - 100ms is simply double that
+	 */
+	d, _ := time.ParseDuration("100ms")
 	time.Sleep(d)
 
 	buf, err := ioutil.ReadFile(cf.Name())
@@ -466,8 +478,12 @@ EOD
 		t.Errorf("Expected exit status 1, recevied: %+v\n", driver.Last.ExitStatus)
 	}
 
-	/* give enough time for the async call to complete, 50ms is totally arbitrary */
-	d, _ := time.ParseDuration("50ms")
+	/* give enough time for the async call to complete:
+	 *  - 50ms was totally arbitrary starting point, failed on FreeBSD
+	 *    build cluster
+	 *  - 100ms is simply double that
+	 */
+	d, _ := time.ParseDuration("100ms")
 	time.Sleep(d)
 
 	buf, err := ioutil.ReadFile(cf.Name())
