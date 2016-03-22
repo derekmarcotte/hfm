@@ -1,5 +1,5 @@
 ETCDIR?=examples
-TAG?=`git describe`
+TAG?=`git describe --tags`
 
 help:
 	@echo "Targets:"
