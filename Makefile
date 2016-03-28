@@ -16,6 +16,9 @@ clean:
 	-rm -rf vendor/src/github.com
 
 test: deps
+	gb test all -v -short
+
+test-long: deps
 	gb test all -v
 
 patch-local-go-libucl: deps

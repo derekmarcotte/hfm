@@ -80,6 +80,10 @@ func TestDriverStatusDisabled(t *testing.T) {
 }
 
 func TestDriverInterrupt(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Tests relying timing should be done in a more controlled environment.")
+	}
+
 	var c Configuration
 
 	cfg := `runs=1; timeout_int=10ms; test="sleep"; test_arguments="2"`
@@ -102,6 +106,10 @@ func TestDriverInterrupt(t *testing.T) {
 }
 
 func TestDriverKill(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Tests relying timing should be done in a more controlled environment.")
+	}
+
 	var c Configuration
 
 	cfg := `runs=1; timeout_kill=10ms; test="/bin/sh"; test_arguments=[ "-c", "trap '' SIGINT; sleep 2" ]`
@@ -148,6 +156,10 @@ func TestDriverExit1(t *testing.T) {
 }
 
 func TestDriverChangeFail(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Tests relying timing should be done in a more controlled environment.")
+	}
+
 	var c Configuration
 
 	f, err := ioutil.TempFile("", "hfm-test-suite-")
@@ -193,6 +205,10 @@ func TestDriverChangeFail(t *testing.T) {
 }
 
 func TestDriverChangeSuccess(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Tests relying timing should be done in a more controlled environment.")
+	}
+
 	var c Configuration
 
 	f, err := ioutil.TempFile("", "hfm-test-suite-")
@@ -242,6 +258,10 @@ change_success_arguments = "` + f.Name() + `"`
 }
 
 func TestDriverDebounceFail(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Tests relying timing should be done in a more controlled environment.")
+	}
+
 	var c Configuration
 
 	cf, err := ioutil.TempFile("", "hfm-test-suite-debounce-fail-runs-")
@@ -376,6 +396,10 @@ EOD
 }
 
 func TestDriverDebounceSuccess(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Tests relying timing should be done in a more controlled environment.")
+	}
+
 	var c Configuration
 
 	cf, err := ioutil.TempFile("", "hfm-test-suite-debounce-success-runs-")
