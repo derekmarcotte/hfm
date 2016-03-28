@@ -32,7 +32,9 @@ package main
 import (
 	"bytes"
 	"fmt"
+	_ "os"
 	"os/exec"
+	_ "os/signal"
 	"reflect"
 	"syscall"
 	"time"
@@ -42,6 +44,7 @@ type ExitRecord struct {
 	ExecDuration time.Duration
 	Error        error
 	ExitStatus   int
+	stateChanged bool
 }
 
 type RuleDriver struct {
@@ -50,12 +53,25 @@ type RuleDriver struct {
 	Last        ExitRecord
 	AppInstance uint64
 	count       uint64
+
+	// run meta info
+
+	start           time.Time
+	out             bytes.Buffer
+	err             bytes.Buffer
+	cmdDone         chan error
+	immediate       chan bool
+	timerStart      *time.Timer
+	ticker          *time.Ticker
+	currentInterval float64
+	nextInterval    float64
 }
 
 func (rd *RuleDriver) resetLast() {
 	rd.Last.ExecDuration = 0
 	rd.Last.Error = nil
 	rd.Last.ExitStatus = 0
+	rd.Last.stateChanged = false
 }
 
 func (rd *RuleDriver) handleCmdDone(value reflect.Value) {
@@ -89,30 +105,34 @@ func (rd *RuleDriver) handleCmdKillTimeout(cmd *exec.Cmd) {
 }
 
 /* process any output produced by the command, get buffers ready for next run */
-func (rd *RuleDriver) handleCmdBuffers(stdout *bytes.Buffer, stderr *bytes.Buffer) {
-	if stdout.Len() > 0 {
-		log.Info("'%s' run %s test produced output: %v", rd.Rule.Name, rd.GetRunUid(), stdout)
+func (rd *RuleDriver) handleCmdBuffers() {
+	if rd.out.Len() > 0 {
+		log.Info("'%s' run %s test produced output: %v", rd.Rule.Name, rd.GetRunUid(), rd.out.String())
 	}
-	stdout.Reset()
+	rd.out.Reset()
 
-	if stderr.Len() > 0 {
-		log.Error("'%s' run %s test produced error output: %v", rd.Rule.Name, rd.GetRunUid(), stderr)
+	if rd.err.Len() > 0 {
+		log.Error("'%s' run %s test produced error output: %v", rd.Rule.Name, rd.GetRunUid(), rd.err.String())
 	}
-	stderr.Reset()
+	rd.err.Reset()
 }
 
 func (rd *RuleDriver) handleStateChange(newState RuleStateType) {
 	log.Warning("'%s' run %s changed state to: %v", rd.Rule.Name, rd.GetRunUid(), newState)
+
 	rd.Rule.LastState = newState
+	rd.Last.stateChanged = true
 
 	var changeCmd string
 	var args []string
 	if newState == RuleStateSuccess {
 		changeCmd = rd.Rule.ChangeSuccess
 		args = rd.Rule.ChangeSuccessArguments
+		rd.currentInterval = rd.Rule.Interval
 	} else {
 		changeCmd = rd.Rule.ChangeFail
 		args = rd.Rule.ChangeFailArguments
+		rd.currentInterval = rd.Rule.IntervalFail
 	}
 
 	if changeCmd == "" {
@@ -131,10 +151,10 @@ func (rd *RuleDriver) handleStateChange(newState RuleStateType) {
 		cmd.Run()
 
 		if stdout.Len() > 0 {
-			log.Info("'%s' run %s change command produced output: %v", rd.Rule.Name, rd.GetRunUid(), stdout)
+			log.Info("'%s' run %s change command produced output: %v", rd.Rule.Name, rd.GetRunUid(), stdout.String())
 		}
 		if stderr.Len() > 0 {
-			log.Error("'%s' run %s change command produced error output: %v", rd.Rule.Name, rd.GetRunUid(), stderr)
+			log.Error("'%s' run %s change command produced error output: %v", rd.Rule.Name, rd.GetRunUid(), stderr.String())
 		}
 	}(changeCmd, args)
 }
@@ -184,9 +204,10 @@ func (rd *RuleDriver) GetRunUid() string {
 	}
 }
 
-func (rd *RuleDriver) buildCases(cmdDone *chan error, timeoutKill time.Duration) []reflect.SelectCase {
+func (rd *RuleDriver) buildCases() []reflect.SelectCase {
 
-	timeoutInt := time.Duration(rd.Rule.TimeoutInt * float64(time.Second))
+	timeoutInt := IntervalToDuration(rd.Rule.TimeoutInt)
+	timeoutKill := IntervalToDuration(rd.Rule.TimeoutKill)
 
 	count := 3
 	if timeoutKill == 0 {
@@ -197,7 +218,7 @@ func (rd *RuleDriver) buildCases(cmdDone *chan error, timeoutKill time.Duration)
 	}
 
 	cases := make([]reflect.SelectCase, count)
-	cases[0] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(*cmdDone)}
+	cases[0] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(rd.cmdDone)}
 
 	if timeoutKill > 0 && timeoutInt > 0 {
 		cases[1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(timeoutKill))}
@@ -211,95 +232,138 @@ func (rd *RuleDriver) buildCases(cmdDone *chan error, timeoutKill time.Duration)
 	return cases
 }
 
-func (rd *RuleDriver) Run() {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+func (rd *RuleDriver) realRun() {
+	rd.start = time.Now()
+	rd.count++
 
-	cmdDone := make(chan error)
+	log.Debug("'%s' starting run %v, at %v...", rd.Rule.Name, rd.GetRunUid(), rd.start)
 
-	interval := time.Duration(rd.Rule.Interval * float64(time.Second))
-	intervalFail := time.Duration(rd.Rule.IntervalFail * float64(time.Second))
+	rd.resetLast()
 
-	timeoutKill := time.Duration(rd.Rule.TimeoutKill * float64(time.Second))
+	// new cmd
+	cmd := exec.Command(rd.Rule.Test, rd.Rule.TestArguments...)
 
-	for rd.Rule.Status != RuleStatusDisabled {
-		start := time.Now()
-		rd.count++
+	cmd.Stdout = &rd.out
+	cmd.Stderr = &rd.err
 
-		log.Debug("'%s' starting run %v, at %v...", rd.Rule.Name, rd.GetRunUid(), start)
+	cases := rd.buildCases()
 
-		rd.resetLast()
+	if err := cmd.Start(); err != nil {
+		rd.Rule.Status = RuleStatusDisabled
+		log.Error("'%s' %s failed to start, disabling: %v", rd.Rule.Name, rd.GetRunUid(), err)
 
-		cmd := exec.Command(rd.Rule.Test, rd.Rule.TestArguments...)
+		rd.Done <- rd
+		return
+	}
 
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
+	go func() {
+		rd.cmdDone <- cmd.Wait()
+	}()
 
-		cases := rd.buildCases(&cmdDone, timeoutKill)
+	/* while we still are expecting events to listen to */
+	for len(cases) > 0 {
+		i, value, _ := reflect.Select(cases)
 
-		if err := cmd.Start(); err != nil {
-			rd.Rule.Status = RuleStatusDisabled
-			log.Error("'%s' %s failed to start, disabling: %v", rd.Rule.Name, rd.GetRunUid(), err)
-
-			rd.Done <- rd
-			return
-		}
-
-		go func() {
-			cmdDone <- cmd.Wait()
-		}()
-
-		/* while we still are expecting events to listen to */
-		for len(cases) > 0 {
-			i, value, _ := reflect.Select(cases)
-
-			switch i {
-			case 0:
-				rd.handleCmdDone(value)
-			case 1:
-				if timeoutKill > 0 {
-					rd.handleCmdKillTimeout(cmd)
-				} else {
-					rd.handleCmdIntTimeout(cmd)
-				}
-			case 2:
+		switch i {
+		case 0:
+			rd.handleCmdDone(value)
+		case 1:
+			if rd.Rule.TimeoutKill > 0 {
+				rd.handleCmdKillTimeout(cmd)
+			} else {
 				rd.handleCmdIntTimeout(cmd)
 			}
-
-			/* each of these happens once, and are ordered
-			 * by index, with done being the first in the set
-			 */
-			switch i {
-			case 0:
-				cases = nil
-			case 1, 2:
-				cases = cases[:i]
-			}
-		}
-		rd.Last.ExecDuration = time.Since(start)
-
-		rd.handleCmdBuffers(&stdout, &stderr)
-
-		rd.updateRuleState()
-
-		if rd.Rule.Runs > 0 && rd.count >= uint64(rd.Rule.Runs) {
-			log.Debug("'%s' run %v, runs configured exceeded, disabling", rd.Rule.Name, rd.GetRunUid(), start)
-			rd.Rule.Status = RuleStatusDisabled
+		case 2:
+			rd.handleCmdIntTimeout(cmd)
 		}
 
-		/* I don't think we should allow back-log
-		 *   if the test takes longer than the interval
-		 *   we'll just run it in a tight loop
-		 * Maybe there's a more graceful way to do this, but
-		 *   this is fairly cheap to implement
-		 *   although tests will not execute on exactly interval
+		/* each of these happens once, and are ordered
+		 * by index, with done being the first in the set
 		 */
-		next := interval - time.Since(start)
-		if rd.Rule.LastState == RuleStateFail {
-			next = intervalFail - time.Since(start)
+		switch i {
+		case 0:
+			cases = nil
+		case 1, 2:
+			cases = cases[:i]
 		}
-		if rd.Rule.Status != RuleStatusDisabled && next > 0 {
-			time.Sleep(next)
+	}
+	rd.Last.ExecDuration = time.Since(rd.start)
+
+	rd.handleCmdBuffers()
+
+	rd.updateRuleState()
+
+	if rd.Rule.Runs > 0 && rd.count >= uint64(rd.Rule.Runs) {
+		log.Debug("'%s' run %v, runs configured exceeded, disabling", rd.Rule.Name, rd.GetRunUid())
+		rd.Rule.Status = RuleStatusDisabled
+	} else if rd.currentInterval == 0 {
+		log.Debug("'%s' run %v, scheduling immediate run", rd.Rule.Name, rd.GetRunUid())
+		rd.immediate <- true
+	} else if rd.Last.stateChanged {
+		// only update timers/tickers if the state actually changes
+		// schedule our first run under new ticker
+		// we need to stop the ticker, and schedule next run to start
+
+		rd.ticker.Stop()
+		next := IntervalToDuration(rd.currentInterval) - time.Since(rd.start)
+
+		// ticker will be re-established when this next run starts
+		rd.timerStart = time.NewTimer(next)
+		log.Debug("'%s' run %v, scheduling run in %v", rd.Rule.Name, rd.GetRunUid(), next)
+	}
+
+}
+
+func (rd *RuleDriver) Run() {
+	rd.cmdDone = make(chan error)
+	rd.immediate = make(chan bool, 1)
+
+	start := IntervalToDuration(rd.Rule.StartDelay)
+
+	// we can't have either of our time changes be nil
+	rd.timerStart = time.NewTimer(start)
+	rd.ticker = time.NewTicker(IntervalToDuration(rd.Rule.StartDelay + 10000))
+	// ticker should be a no-op on the first run
+	rd.ticker.Stop()
+
+	log.Debug("'%s' first run in %v", rd.Rule.Name, start)
+
+	/*
+		interrupt := make(chan os.Signal, 1)
+		signal.Notify(interrupt, os.Interrupt)
+		signal.Notify(interrupt, syscall.SIGTERM)
+	*/
+
+	for rd.Rule.Status != RuleStatusDisabled {
+		log.Debug("'%s' run %v, waiting for next event", rd.Rule.Name, rd.GetRunUid())
+		// XXX: need always here as well
+		select {
+		case <-rd.timerStart.C:
+			log.Debug("'%s' run %v, running via timerStart", rd.Rule.Name, rd.GetRunUid())
+
+			// will introduce drift for each state change
+			// only change the ticker afer the first tick
+			if rd.currentInterval > 0 {
+				if rd.Rule.Interval == rd.Rule.IntervalFail {
+					if rd.count == 1 {
+						// setup our initial ticker after start delay
+						rd.ticker = time.NewTicker(IntervalToDuration(rd.currentInterval))
+					}
+				} else {
+					rd.ticker = time.NewTicker(IntervalToDuration(rd.currentInterval))
+				}
+			}
+			rd.realRun()
+		case <-rd.immediate:
+			log.Debug("'%s' run %v, running via immediate", rd.Rule.Name, rd.GetRunUid())
+			rd.realRun()
+		case <-rd.ticker.C:
+			log.Debug("'%s' run %v, running via ticker", rd.Rule.Name, rd.GetRunUid())
+			rd.realRun()
+			/*
+				case <-interrupt:
+					rd.Rule.Status = RuleStatusDisabled
+			*/
 		}
 	}
 

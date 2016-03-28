@@ -30,6 +30,8 @@
 
 package main
 
+import "time"
+
 /* definitions */
 
 type RuleStateType int
@@ -100,4 +102,9 @@ type Rule struct {
 
 	/* the result of the last rule check */
 	LastState RuleStateType
+}
+
+// coverts a rule interval to a time.Duration
+func IntervalToDuration(i float64) time.Duration {
+	return time.Duration(i * float64(time.Second))
 }
