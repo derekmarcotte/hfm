@@ -81,7 +81,7 @@ func TestDriverStatusDisabled(t *testing.T) {
 
 func TestDriverInterrupt(t *testing.T) {
 	if testing.Short() {
-		t.Skip("Tests relying timing should be done in a more controlled environment.")
+		t.Skip("Tests relying on timing should be done in a more controlled environment.")
 	}
 
 	var c Configuration
@@ -107,7 +107,7 @@ func TestDriverInterrupt(t *testing.T) {
 
 func TestDriverKill(t *testing.T) {
 	if testing.Short() {
-		t.Skip("Tests relying timing should be done in a more controlled environment.")
+		t.Skip("Tests relying on timing should be done in a more controlled environment.")
 	}
 
 	var c Configuration
@@ -157,7 +157,7 @@ func TestDriverExit1(t *testing.T) {
 
 func TestDriverChangeFail(t *testing.T) {
 	if testing.Short() {
-		t.Skip("Tests relying timing should be done in a more controlled environment.")
+		t.Skip("Tests relying on timing should be done in a more controlled environment.")
 	}
 
 	var c Configuration
@@ -206,7 +206,7 @@ func TestDriverChangeFail(t *testing.T) {
 
 func TestDriverChangeSuccess(t *testing.T) {
 	if testing.Short() {
-		t.Skip("Tests relying timing should be done in a more controlled environment.")
+		t.Skip("Tests relying on timing should be done in a more controlled environment.")
 	}
 
 	var c Configuration
@@ -259,7 +259,7 @@ change_success_arguments = "` + f.Name() + `"`
 
 func TestDriverDebounceFail(t *testing.T) {
 	if testing.Short() {
-		t.Skip("Tests relying timing should be done in a more controlled environment.")
+		t.Skip("Tests relying on timing should be done in a more controlled environment.")
 	}
 
 	var c Configuration
@@ -397,7 +397,7 @@ EOD
 
 func TestDriverDebounceSuccess(t *testing.T) {
 	if testing.Short() {
-		t.Skip("Tests relying timing should be done in a more controlled environment.")
+		t.Skip("Tests relying on timing should be done in a more controlled environment.")
 	}
 
 	var c Configuration
