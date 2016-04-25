@@ -39,7 +39,9 @@ type DelayedTicker struct {
 	C chan time.Time
 
 	// signal the loop to quit
-	quit       chan struct{}
+	quit chan struct{}
+
+	// let the loop drivers know when interesting things happen
 	loopStatus chan struct{}
 
 	running bool
@@ -82,14 +84,19 @@ func (t *DelayedTicker) loop(delay time.Duration, interval time.Duration) {
 	t.running = true
 	t.loopStatus <- struct{}{}
 
-	// need a valid ticker reference, so we don't get nil reference
-	// in the select
+	// need a valid ticker reference, so we don't get nil reference in the
+	// select
 	ticker := time.NewTicker(time.Nanosecond)
 	ticker.Stop()
 
-	// this gets close to a spin at 1/3ms, be careful
-	// on FreeBSD at least this is limited to 1 tick (1000ms by default)
+	/*
+	 * It would be nice to wait until someone consumes the immediate,
+	 * however this gives us a deadlock.
+	 *
+	 */
 	if interval == 0 {
+		// this gets close to a spin at 1/3ms, be careful
+		// on FreeBSD at least this is limited to 1 tick (1000ms by default)
 		interval = time.Microsecond * 333
 	}
 

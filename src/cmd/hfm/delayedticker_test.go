@@ -31,14 +31,14 @@ package main
 
 import "testing"
 import "time"
-import "fmt"
+
+const delayedTickerTestEps = time.Millisecond * 100
 
 func TestDelayedTickerS1000T100(t *testing.T) {
 	var l [6]time.Time
 
 	sv := time.Second * 1
 	tv := time.Millisecond * 100
-	e := time.Millisecond * 10
 
 	dt := NewDelayedTicker()
 	start := time.Now()
@@ -48,34 +48,51 @@ func TestDelayedTickerS1000T100(t *testing.T) {
 	for i := 0; i < len(l); i++ {
 		l[i] = <-dt.C
 	}
-	fmt.Println("Stopping ticker...")
 	dt.Stop()
-	fmt.Println("Stoppedd ticker...")
 
 	// test the values
 	d := l[0].Sub(start)
-	if d > (sv + e) {
-		t.Errorf("Start time out of expected range, d: %v, sv: %v, e: %v", d, sv, e)
+	if d > (sv + delayedTickerTestEps) {
+		t.Errorf("Start time out of expected range, d: %v, sv: %v, delayedTickerTestEps: %v", d, sv, delayedTickerTestEps)
 	}
 
 	for i := 1; i < len(l); i++ {
-		if l[i].Sub(l[i-1]) > (tv + e) {
-			t.Errorf("Tick interval out of expected range, d: %v, tv: %v, e: %v", d, tv, e)
+		if l[i].Sub(l[i-1]) > (tv + delayedTickerTestEps) {
+			t.Errorf("Tick interval out of expected range, d: %v, tv: %v, delayedTickerTestEps: %v", d, tv, delayedTickerTestEps)
 		}
 	}
 }
 
-func TestDelayedTickerS0T0NoRead(t *testing.T) {
+func TestDelayedTickerStartStop(t *testing.T) {
 	dt := NewDelayedTicker()
 
 	dt.Start(0, 0)
 	dt.Stop()
+
+	if delayedTickerTestEps := <-dt.C; !delayedTickerTestEps.IsZero() {
+		t.Errorf("Still producing values")
+	}
+}
+
+func TestDelayedTickerStartStopStop(t *testing.T) {
+	dt := NewDelayedTicker()
+
+	dt.Start(0, time.Second*10)
+	if err := dt.Stop(); err != nil {
+		t.Errorf("First Stop produced an error %v:", err)
+	}
+
+	if err := dt.Stop(); err == nil {
+		t.Errorf("Second Stop produced no error %v:", err)
+	}
+
+	if err := dt.ChangeRunningInterval(time.Second * 1000); err == nil {
+		t.Errorf("ChangeRunningInterval produced no error %v:", err)
+	}
 }
 
 func TestDelayedTickerS0T0(t *testing.T) {
 	var l [6]time.Time
-
-	e := time.Millisecond * 10
 
 	dt := NewDelayedTicker()
 
@@ -85,19 +102,17 @@ func TestDelayedTickerS0T0(t *testing.T) {
 	for i := 0; i < len(l); i++ {
 		l[i] = <-dt.C
 	}
-	fmt.Println("Stopping ticker...")
 	dt.Stop()
-	fmt.Println("Stoppedd ticker...")
 
 	// test the values
 	d := l[0].Sub(start)
-	if d > e {
-		t.Errorf("Start time out of expected range, d: %v, sv: %v, e: %v", d, 0, e)
+	if d > delayedTickerTestEps {
+		t.Errorf("Start time out of expected range, d: %v, sv: %v, delayedTickerTestEps: %v", d, 0, delayedTickerTestEps)
 	}
 
 	for i := 1; i < len(l); i++ {
-		if l[i].Sub(l[i-1]) > (e) {
-			t.Errorf("Tick interval out of expected range, d: %v, tv: %v, e: %v", d, 0, e)
+		if l[i].Sub(l[i-1]) > (delayedTickerTestEps) {
+			t.Errorf("Tick interval out of expected range, d: %v, tv: %v, delayedTickerTestEps: %v", d, 0, delayedTickerTestEps)
 		}
 	}
 }
@@ -109,9 +124,7 @@ func TestDelayedTickerOneChangeSlower(t *testing.T) {
 		100, time.Millisecond * 150, time.Millisecond * 150, time.Millisecond *
 		150, time.Millisecond * 150}
 
-	fmt.Println(len(exp))
-
-	e := time.Millisecond * 3
+	//fmt.Println(len(exp))
 
 	dt := NewDelayedTicker()
 
@@ -126,22 +139,20 @@ func TestDelayedTickerOneChangeSlower(t *testing.T) {
 		}
 
 	}
-	fmt.Println("Stopping ticker...")
 	dt.Stop()
-	fmt.Println("Stoppedd ticker...")
 
 	d := l[0].Sub(start)
-	fmt.Printf("d[0]: %v\n", d)
-	if d > e {
-		t.Errorf("Tick interval out of expected range, d: %v, tv: %v, e: %v", d, 0, e)
+	//fmt.Printf("d[0]: %v\n", d)
+	if d > delayedTickerTestEps {
+		t.Errorf("Tick interval out of expected range, d: %v, tv: %v, delayedTickerTestEps: %v", d, 0, delayedTickerTestEps)
 	}
 
 	for i := 1; i < len(l); i++ {
 		d := l[i].Sub(l[i-1])
-		fmt.Printf("d[%d]: %v l: %v\n", i, d, l[i])
+		//fmt.Printf("d[%d]: %v l: %v\n", i, d, l[i])
 
-		if d > (exp[i] + e) {
-			t.Errorf("Tick interval out of expected range, d: %v, tv: %v, e: %v", d, i, e)
+		if d > (exp[i] + delayedTickerTestEps) {
+			t.Errorf("Tick interval out of expected range, d: %v, tv: %v, delayedTickerTestEps: %v", d, i, delayedTickerTestEps)
 		}
 	}
 }
