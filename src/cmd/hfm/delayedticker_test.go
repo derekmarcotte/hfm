@@ -32,9 +32,13 @@ package main
 import "testing"
 import "time"
 
-const delayedTickerTestEps = time.Millisecond * 100
+const delayedTickerTestEps = time.Millisecond * 75
 
 func TestDelayedTickerS1000T100(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Tests relying on timing should be done in a more controlled environment.")
+	}
+
 	var l [6]time.Time
 
 	sv := time.Second * 1
@@ -57,21 +61,36 @@ func TestDelayedTickerS1000T100(t *testing.T) {
 	}
 
 	for i := 1; i < len(l); i++ {
-		if l[i].Sub(l[i-1]) > (tv + delayedTickerTestEps) {
-			t.Errorf("Tick interval out of expected range, d: %v, tv: %v, delayedTickerTestEps: %v", d, tv, delayedTickerTestEps)
+		d := l[i].Sub(l[i-1])
+		if d > (tv + delayedTickerTestEps) {
+			t.Errorf("Tick interval out of expected range, i: %v, d: %v, tv: %v, delayedTickerTestEps: %v", i, d, tv, delayedTickerTestEps)
 		}
 	}
 }
 
 func TestDelayedTickerStartStop(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Tests relying on timing should be done in a more controlled environment.")
+	}
+
 	dt := NewDelayedTicker()
 
 	dt.Start(0, 0)
+	time.Sleep(2 * delayedTickerTestEps)
 	dt.Stop()
 
-	if delayedTickerTestEps := <-dt.C; !delayedTickerTestEps.IsZero() {
-		t.Errorf("Still producing values")
+	select {
+	case <-dt.C:
+	default:
+		t.Errorf("No value ready")
 	}
+
+	select {
+	case <-dt.C:
+		t.Errorf("Still producing values")
+	default:
+	}
+
 }
 
 func TestDelayedTickerStartStopStop(t *testing.T) {
@@ -92,6 +111,10 @@ func TestDelayedTickerStartStopStop(t *testing.T) {
 }
 
 func TestDelayedTickerS0T0(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Tests relying on timing should be done in a more controlled environment.")
+	}
+
 	var l [6]time.Time
 
 	dt := NewDelayedTicker()
@@ -111,18 +134,25 @@ func TestDelayedTickerS0T0(t *testing.T) {
 	}
 
 	for i := 1; i < len(l); i++ {
-		if l[i].Sub(l[i-1]) > (delayedTickerTestEps) {
-			t.Errorf("Tick interval out of expected range, d: %v, tv: %v, delayedTickerTestEps: %v", d, 0, delayedTickerTestEps)
+		d := l[i].Sub(l[i-1])
+		if d > (delayedTickerTestEps) {
+			t.Errorf("Tick interval out of expected range, i: %v, d: %v, delayedTickerTestEps: %v", i, d, delayedTickerTestEps)
 		}
 	}
 }
 
 func TestDelayedTickerOneChangeSlower(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Tests relying on timing should be done in a more controlled environment.")
+	}
+
 	var l [10]time.Time
-	exp := [...]time.Duration{0, time.Millisecond * 100, time.Millisecond *
-		100, time.Millisecond * 100, time.Millisecond * 100, time.Millisecond *
-		100, time.Millisecond * 150, time.Millisecond * 150, time.Millisecond *
-		150, time.Millisecond * 150}
+	exp := [...]time.Duration{0,
+		time.Millisecond * 100, time.Millisecond * 100,
+		time.Millisecond * 100, time.Millisecond * 100,
+		time.Millisecond * 100,
+		time.Millisecond * 150, time.Millisecond * 150,
+		time.Millisecond * 150, time.Millisecond * 150}
 
 	//fmt.Println(len(exp))
 
@@ -152,7 +182,51 @@ func TestDelayedTickerOneChangeSlower(t *testing.T) {
 		//fmt.Printf("d[%d]: %v l: %v\n", i, d, l[i])
 
 		if d > (exp[i] + delayedTickerTestEps) {
-			t.Errorf("Tick interval out of expected range, d: %v, tv: %v, delayedTickerTestEps: %v", d, i, delayedTickerTestEps)
+			t.Errorf("Tick interval out of expected range, i: %v, d: %v, tv: %v, delayedTickerTestEps: %v", i, d, exp[i], delayedTickerTestEps)
+		}
+	}
+}
+
+func TestDelayedTickerAFewChanges(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Tests relying on timing should be done in a more controlled environment.")
+	}
+
+	var l [10]time.Time
+	exp := [...]time.Duration{0,
+		time.Millisecond * 100, time.Millisecond * 100,
+		time.Millisecond * 150, time.Millisecond * 150,
+		0, 0,
+		time.Millisecond * 200, time.Millisecond * 0,
+		time.Millisecond * 50, 0}
+
+	//fmt.Println(len(exp))
+
+	dt := NewDelayedTicker()
+
+	// run the ticker
+	start := time.Now()
+	dt.Start(exp[0], exp[1])
+
+	for i := 0; i < len(l); i++ {
+		l[i] = <-dt.C
+		dt.ChangeRunningInterval(exp[i+1])
+
+	}
+	dt.Stop()
+
+	d := l[0].Sub(start)
+	//fmt.Printf("d[0]: %v\n", d)
+	if d > delayedTickerTestEps {
+		t.Errorf("Tick interval out of expected range, d: %v, tv: %v, delayedTickerTestEps: %v", d, 0, delayedTickerTestEps)
+	}
+
+	for i := 1; i < len(l); i++ {
+		d := l[i].Sub(l[i-1])
+		//fmt.Printf("d[%d]: %v l: %v\n", i, d, l[i])
+
+		if d > (exp[i] + delayedTickerTestEps) {
+			t.Errorf("Tick interval out of expected range, i: %v, d: %v, tv: %v, delayedTickerTestEps: %v", i, d, exp[i], delayedTickerTestEps)
 		}
 	}
 }

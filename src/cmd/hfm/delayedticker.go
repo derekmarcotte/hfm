@@ -49,6 +49,7 @@ type DelayedTicker struct {
 
 	// used for internal bookeeping
 	lastTick time.Time
+	interval time.Duration
 }
 
 func NewDelayedTicker() *DelayedTicker {
@@ -71,15 +72,17 @@ func (t *DelayedTicker) Start(delay time.Duration, interval time.Duration) error
 
 	t.lastTick = time.Now()
 
-	go t.loop(delay, interval)
+	t.interval = interval
+	go t.loop(delay)
 	<-t.loopStatus
 
 	return nil
 }
 
-func (t *DelayedTicker) loop(delay time.Duration, interval time.Duration) {
+func (t *DelayedTicker) loop(delay time.Duration) {
 	// we want the most accurate delay we can get, do this before blocking
 	start := time.NewTimer(delay)
+	defer start.Stop()
 
 	t.running = true
 	t.loopStatus <- struct{}{}
@@ -89,16 +92,8 @@ func (t *DelayedTicker) loop(delay time.Duration, interval time.Duration) {
 	ticker := time.NewTicker(time.Nanosecond)
 	ticker.Stop()
 
-	/*
-	 * It would be nice to wait until someone consumes the immediate,
-	 * however this gives us a deadlock.
-	 *
-	 */
-	if interval == 0 {
-		// this gets close to a spin at 1/3ms, be careful
-		// on FreeBSD at least this is limited to 1 tick (1000ms by default)
-		interval = time.Microsecond * 333
-	}
+	immediate := make(chan struct{}, 1)
+	defer close(immediate)
 
 timerEvents:
 	for {
@@ -106,38 +101,49 @@ timerEvents:
 		case <-t.quit:
 			break timerEvents
 		case <-start.C:
-			// only start the ticker after the initial delay
-			ticker = time.NewTicker(interval)
+			if t.interval > 0 {
+				// only start the ticker after the initial delay
+				ticker = time.NewTicker(t.interval)
+				defer ticker.Stop()
+			} else {
+				immediate <- struct{}{}
+			}
 		case <-ticker.C:
+		case <-immediate:
+			immediate <- struct{}{}
 		}
 
-		// only emit the tick if someone has consumed it, otherwise discard
-		if len(t.C) == 0 {
-			t.lastTick = time.Now()
-			t.C <- t.lastTick
+		t.lastTick = time.Now()
+		select {
+		case <-t.quit:
+			// we need to be able to quit if the last event won't
+			// be consumed
+			break timerEvents
+		case t.C <- t.lastTick:
 		}
 	}
 
-	start.Stop()
-	ticker.Stop()
-
-	t.running = false
 	t.loopStatus <- struct{}{}
 }
 
-/* Stop emitting messages and close C */
+/* Stop emitting messages.  To keep with Timer/Ticker conventions:
+ *
+ *    "Stop does not close the channel, to prevent a read from the channel
+ *    succeeding incorrectly. "
+ */
 func (t *DelayedTicker) Stop() error {
 	if !t.running {
 		return fmt.Errorf("DelayedTicker not running")
 	}
 
+	defer close(t.quit)
+	defer close(t.loopStatus)
+
 	t.stopped = true
 	t.quit <- struct{}{}
-	<-t.loopStatus
 
-	close(t.C)
-	close(t.quit)
-	close(t.loopStatus)
+	<-t.loopStatus
+	t.running = false
 
 	return nil
 }
@@ -148,10 +154,16 @@ func (t *DelayedTicker) ChangeRunningInterval(interval time.Duration) error {
 		return fmt.Errorf("DelayedTicker not running")
 	}
 
+	if interval == t.interval {
+		// change is a no-op
+		return nil
+	}
+
 	t.quit <- struct{}{}
 	<-t.loopStatus
 
-	go t.loop(interval-time.Since(t.lastTick), interval)
+	t.interval = interval
+	go t.loop(t.interval - time.Since(t.lastTick))
 	<-t.loopStatus
 
 	return nil
