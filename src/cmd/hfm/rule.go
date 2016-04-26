@@ -65,17 +65,17 @@ type Rule struct {
 	Status RuleStatusType
 
 	/* what is the period between scheduled runs */
-	Interval float64
+	Interval time.Duration
 
 	/* what is the period between scheduled runs on previously failed rules */
-	IntervalFail float64
+	IntervalFail time.Duration
 
 	/* how long do I delay until starting for the first time */
-	StartDelay float64
+	StartDelay time.Duration
 
 	/* what is the period this task can run for, before killing it */
-	TimeoutInt  float64
-	TimeoutKill float64
+	TimeoutInt  time.Duration
+	TimeoutKill time.Duration
 
 	/* total number of test runs, 0 for infinite, 1 + AlwaysFail is helpful
 	 * for administratively failing over hosts, for example
@@ -102,9 +102,4 @@ type Rule struct {
 
 	/* the result of the last rule check */
 	LastState RuleStateType
-}
-
-// coverts a rule interval to a time.Duration
-func IntervalToDuration(i float64) time.Duration {
-	return time.Duration(i * float64(time.Second))
 }

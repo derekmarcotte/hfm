@@ -32,6 +32,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func matchesInitial(r Rule) error {
@@ -163,7 +164,7 @@ func TestConfigGroup(t *testing.T) {
 func TestConfigInheritedFromDefault(t *testing.T) {
 	var c Configuration
 	var rule *Rule
-	exp := Rule{Status: RuleStatusAlwaysFail, Runs: 1, Interval: 2, IntervalFail: 3, TimeoutInt: 4, StartDelay: 5, TimeoutKill: 7, ChangeFailDebounce: 6, ChangeSuccessDebounce: 7}
+	exp := Rule{Status: RuleStatusAlwaysFail, Runs: 1, Interval: time.Second * 2, IntervalFail: time.Second * 3, TimeoutInt: time.Second * 4, StartDelay: time.Second * 5, TimeoutKill: time.Second * 7, ChangeFailDebounce: 6, ChangeSuccessDebounce: 7}
 	cfg := `
 status=always-fail
 runs=1
@@ -200,7 +201,7 @@ r1 {
 func TestConfigMultipleInherited(t *testing.T) {
 	var c Configuration
 	var rule *Rule
-	exp := Rule{Status: RuleStatusAlwaysFail, Runs: 1, Interval: 5, IntervalFail: 6, TimeoutInt: 7, StartDelay: 8, TimeoutKill: 10, ChangeFailDebounce: 9, ChangeSuccessDebounce: 10}
+	exp := Rule{Status: RuleStatusAlwaysFail, Runs: 1, Interval: time.Second * 5, IntervalFail: time.Second * 6, TimeoutInt: time.Second * 7, StartDelay: time.Second * 8, TimeoutKill: time.Second * 10, ChangeFailDebounce: 9, ChangeSuccessDebounce: 10}
 	cfg := `
 status=always-fail
 runs=1

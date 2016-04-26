@@ -33,6 +33,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 /* external includes */
@@ -240,19 +241,19 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 
 			switch field {
 			case "start_delay":
-				rule.StartDelay = tmp
+				rule.StartDelay = intervalToDuration(tmp)
 				ruleFound.StartDelay = true
 			case "interval":
-				rule.Interval = tmp
+				rule.Interval = intervalToDuration(tmp)
 				ruleFound.Interval = true
 			case "interval_fail":
-				rule.IntervalFail = tmp
+				rule.IntervalFail = intervalToDuration(tmp)
 				ruleFound.IntervalFail = true
 			case "timeout_int":
-				rule.TimeoutInt = tmp
+				rule.TimeoutInt = intervalToDuration(tmp)
 				ruleFound.TimeoutInt = true
 			case "timeout_kill":
-				rule.TimeoutKill = tmp
+				rule.TimeoutKill = intervalToDuration(tmp)
 				ruleFound.TimeoutKill = true
 			}
 		case "test", "change_fail", "change_success":
@@ -437,4 +438,9 @@ func (c *Configuration) inheritValues(dst *Rule, src Rule, f *RuleFound) {
 	if !f.ChangeSuccessDebounce && dst.ChangeSuccessDebounce == 0 {
 		dst.ChangeSuccessDebounce = src.ChangeSuccessDebounce
 	}
+}
+
+// coverts a rule interval to a time.Duration
+func intervalToDuration(i float64) time.Duration {
+	return time.Duration(i * float64(time.Second))
 }

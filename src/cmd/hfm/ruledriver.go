@@ -63,8 +63,8 @@ type RuleDriver struct {
 	immediate       chan bool
 	timerStart      *time.Timer
 	ticker          *time.Ticker
-	currentInterval float64
-	nextInterval    float64
+	currentInterval time.Duration
+	nextInterval    time.Duration
 }
 
 func (rd *RuleDriver) resetLast() {
@@ -206,8 +206,8 @@ func (rd *RuleDriver) GetRunUid() string {
 
 func (rd *RuleDriver) buildCases() []reflect.SelectCase {
 
-	timeoutInt := IntervalToDuration(rd.Rule.TimeoutInt)
-	timeoutKill := IntervalToDuration(rd.Rule.TimeoutKill)
+	timeoutInt := rd.Rule.TimeoutInt
+	timeoutKill := rd.Rule.TimeoutKill
 
 	count := 3
 	if timeoutKill == 0 {
@@ -305,7 +305,7 @@ func (rd *RuleDriver) realRun() {
 		// we need to stop the ticker, and schedule next run to start
 
 		rd.ticker.Stop()
-		next := IntervalToDuration(rd.currentInterval) - time.Since(rd.start)
+		next := rd.currentInterval - time.Since(rd.start)
 
 		// ticker will be re-established when this next run starts
 		rd.timerStart = time.NewTimer(next)
@@ -318,11 +318,11 @@ func (rd *RuleDriver) Run() {
 	rd.cmdDone = make(chan error)
 	rd.immediate = make(chan bool, 1)
 
-	start := IntervalToDuration(rd.Rule.StartDelay)
+	start := rd.Rule.StartDelay
 
 	// we can't have either of our time changes be nil
 	rd.timerStart = time.NewTimer(start)
-	rd.ticker = time.NewTicker(IntervalToDuration(rd.Rule.StartDelay + 10000))
+	rd.ticker = time.NewTicker(rd.Rule.StartDelay + (time.Second * 10000))
 	// ticker should be a no-op on the first run
 	rd.ticker.Stop()
 
@@ -347,10 +347,10 @@ func (rd *RuleDriver) Run() {
 				if rd.Rule.Interval == rd.Rule.IntervalFail {
 					if rd.count == 1 {
 						// setup our initial ticker after start delay
-						rd.ticker = time.NewTicker(IntervalToDuration(rd.currentInterval))
+						rd.ticker = time.NewTicker(rd.currentInterval)
 					}
 				} else {
-					rd.ticker = time.NewTicker(IntervalToDuration(rd.currentInterval))
+					rd.ticker = time.NewTicker(rd.currentInterval)
 				}
 			}
 			rd.realRun()
