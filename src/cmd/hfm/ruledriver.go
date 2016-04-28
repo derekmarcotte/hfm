@@ -55,16 +55,13 @@ type RuleDriver struct {
 	count       uint64
 
 	// run meta info
+	start time.Time
+	out   bytes.Buffer
+	err   bytes.Buffer
 
-	start           time.Time
-	out             bytes.Buffer
-	err             bytes.Buffer
-	cmdDone         chan error
-	immediate       chan bool
-	timerStart      *time.Timer
-	ticker          *time.Ticker
-	currentInterval time.Duration
-	nextInterval    time.Duration
+	dt *DelayedTicker
+
+	cmdDone chan error
 }
 
 func (rd *RuleDriver) resetLast() {
@@ -125,15 +122,20 @@ func (rd *RuleDriver) handleStateChange(newState RuleStateType) {
 
 	var changeCmd string
 	var args []string
+	var interval time.Duration
+
 	if newState == RuleStateSuccess {
 		changeCmd = rd.Rule.ChangeSuccess
 		args = rd.Rule.ChangeSuccessArguments
-		rd.currentInterval = rd.Rule.Interval
+		interval = rd.Rule.Interval
 	} else {
 		changeCmd = rd.Rule.ChangeFail
 		args = rd.Rule.ChangeFailArguments
-		rd.currentInterval = rd.Rule.IntervalFail
+		interval = rd.Rule.IntervalFail
 	}
+
+	rd.dt.ChangeRunningInterval(interval)
+	log.Debug("'%s' run %v, scheduling run in %v", rd.Rule.Name, rd.GetRunUid(), interval)
 
 	if changeCmd == "" {
 		return
@@ -296,37 +298,17 @@ func (rd *RuleDriver) realRun() {
 	if rd.Rule.Runs > 0 && rd.count >= uint64(rd.Rule.Runs) {
 		log.Debug("'%s' run %v, runs configured exceeded, disabling", rd.Rule.Name, rd.GetRunUid())
 		rd.Rule.Status = RuleStatusDisabled
-	} else if rd.currentInterval == 0 {
-		log.Debug("'%s' run %v, scheduling immediate run", rd.Rule.Name, rd.GetRunUid())
-		rd.immediate <- true
-	} else if rd.Last.stateChanged {
-		// only update timers/tickers if the state actually changes
-		// schedule our first run under new ticker
-		// we need to stop the ticker, and schedule next run to start
-
-		rd.ticker.Stop()
-		next := rd.currentInterval - time.Since(rd.start)
-
-		// ticker will be re-established when this next run starts
-		rd.timerStart = time.NewTimer(next)
-		log.Debug("'%s' run %v, scheduling run in %v", rd.Rule.Name, rd.GetRunUid(), next)
 	}
-
 }
 
 func (rd *RuleDriver) Run() {
 	rd.cmdDone = make(chan error)
-	rd.immediate = make(chan bool, 1)
 
-	start := rd.Rule.StartDelay
+	rd.dt = NewDelayedTicker()
+	defer rd.dt.Stop()
 
-	// we can't have either of our time changes be nil
-	rd.timerStart = time.NewTimer(start)
-	rd.ticker = time.NewTicker(rd.Rule.StartDelay + (time.Second * 10000))
-	// ticker should be a no-op on the first run
-	rd.ticker.Stop()
-
-	log.Debug("'%s' first run in %v", rd.Rule.Name, start)
+	log.Debug("'%s' first run in %v", rd.Rule.Name, rd.Rule.StartDelay)
+	rd.dt.Start(rd.Rule.StartDelay, rd.Rule.Interval)
 
 	/*
 		interrupt := make(chan os.Signal, 1)
@@ -336,34 +318,10 @@ func (rd *RuleDriver) Run() {
 
 	for rd.Rule.Status != RuleStatusDisabled {
 		log.Debug("'%s' run %v, waiting for next event", rd.Rule.Name, rd.GetRunUid())
-		// XXX: need always here as well
-		select {
-		case <-rd.timerStart.C:
-			log.Debug("'%s' run %v, running via timerStart", rd.Rule.Name, rd.GetRunUid())
 
-			// will introduce drift for each state change
-			// only change the ticker afer the first tick
-			if rd.currentInterval > 0 {
-				if rd.Rule.Interval == rd.Rule.IntervalFail {
-					if rd.count == 1 {
-						// setup our initial ticker after start delay
-						rd.ticker = time.NewTicker(rd.currentInterval)
-					}
-				} else {
-					rd.ticker = time.NewTicker(rd.currentInterval)
-				}
-			}
+		select {
+		case <-rd.dt.C:
 			rd.realRun()
-		case <-rd.immediate:
-			log.Debug("'%s' run %v, running via immediate", rd.Rule.Name, rd.GetRunUid())
-			rd.realRun()
-		case <-rd.ticker.C:
-			log.Debug("'%s' run %v, running via ticker", rd.Rule.Name, rd.GetRunUid())
-			rd.realRun()
-			/*
-				case <-interrupt:
-					rd.Rule.Status = RuleStatusDisabled
-			*/
 		}
 	}
 
