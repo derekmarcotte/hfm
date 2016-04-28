@@ -230,30 +230,31 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 				return fmt.Errorf("%s: '%s' does not contain a valid string", name, field)
 			}
 		case "start_delay", "interval", "interval_fail", "timeout_int", "timeout_kill":
-			tmp := 0.0
+			tmp := time.Duration(0)
 			/* interval/duration fields */
 			switch c.Type() {
 			case libucl.ObjectTypeInt, libucl.ObjectTypeFloat, libucl.ObjectTypeTime:
-				tmp = c.ToFloat()
+				tmp = time.Duration(c.ToFloat() * float64(time.Second))
+
 			default:
 				return fmt.Errorf("%s: '%s' must be a valid numeric type, got type %v", name, field, c.Type())
 			}
 
 			switch field {
 			case "start_delay":
-				rule.StartDelay = intervalToDuration(tmp)
+				rule.StartDelay = tmp
 				ruleFound.StartDelay = true
 			case "interval":
-				rule.Interval = intervalToDuration(tmp)
+				rule.Interval = tmp
 				ruleFound.Interval = true
 			case "interval_fail":
-				rule.IntervalFail = intervalToDuration(tmp)
+				rule.IntervalFail = tmp
 				ruleFound.IntervalFail = true
 			case "timeout_int":
-				rule.TimeoutInt = intervalToDuration(tmp)
+				rule.TimeoutInt = tmp
 				ruleFound.TimeoutInt = true
 			case "timeout_kill":
-				rule.TimeoutKill = intervalToDuration(tmp)
+				rule.TimeoutKill = tmp
 				ruleFound.TimeoutKill = true
 			}
 		case "test", "change_fail", "change_success":
@@ -438,9 +439,4 @@ func (c *Configuration) inheritValues(dst *Rule, src Rule, f *RuleFound) {
 	if !f.ChangeSuccessDebounce && dst.ChangeSuccessDebounce == 0 {
 		dst.ChangeSuccessDebounce = src.ChangeSuccessDebounce
 	}
-}
-
-// coverts a rule interval to a time.Duration
-func intervalToDuration(i float64) time.Duration {
-	return time.Duration(i * float64(time.Second))
 }
