@@ -46,13 +46,17 @@ change may help to alleviate this.
 
 ## Building
 
-hfm currently uses [gb](https://github.com/constabulary/gb) (verison 0.4.0 and
-up) to build.
+hfm is a standard Go module, and needs Go 1.25 or newer.  There is no longer
+a C toolchain or libucl to install: the configuration parser is pure Go, and
+the resulting binary is statically linked.
 
-Try `make` for hints.
+Try `make` for hints, or build it directly with `go build ./cmd/hfm`.
 
-There's a patch-local-go-libucl make target that will allow you to use the
-locally installed libucl vs. a vendorized version.
+Configuration is read with `go.marcottesoftware.ca/goucl`, a pure-Go
+implementation of libucl, whose source is at
+[github.com/derekmarcotte/goucl](https://github.com/derekmarcotte/goucl).
+`go build` fetches it like any other dependency; nothing needs to be cloned
+alongside this repository.
 
 There is a new repo for [packaging related
 updates](https://github.com/derekmarcotte/hfm-packaging).
@@ -80,7 +84,7 @@ Is a time period, measured in seconds by default.  See
 
 ## Configuration Format
 
-hfm uses libucl for its configuration, this allows a great amount of
+hfm uses UCL for its configuration, this allows a great amount of
 flexibility in the supported configuration syntax.
 
 ### Layout

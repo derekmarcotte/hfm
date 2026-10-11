@@ -1,5 +1,3 @@
 /bin/
-/pkg/
-/vendor/pkg/
-/vendor/src/
+/hfm
 /examples/hfm-test.conf

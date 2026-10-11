@@ -37,7 +37,7 @@ import (
 )
 
 /* external includes */
-import "github.com/mitchellh/go-libucl"
+import "go.marcottesoftware.ca/goucl"
 
 /* definitions */
 
@@ -99,32 +99,27 @@ func (c *Configuration) LoadConfiguration(path string) error {
 }
 
 func (c *Configuration) startConfiguration(config string, configType string) error {
+	var uclConfig *goucl.Node
 	var e error
 
 	/* get the ucl object */
-	p := libucl.NewParser(0)
-	defer p.Close()
-
 	switch configType {
 	case "string":
-		e = p.AddString(config)
+		uclConfig, e = goucl.ParseString(config)
 	default:
-		e = p.AddFile(config)
+		uclConfig, e = goucl.ParseFile(config)
 	}
 
 	if e != nil {
 		return e
 	}
 
-	uclConfig := p.Object()
-	defer uclConfig.Close()
-
 	/* use it to populate myself as a valid hfm object */
 	return c.walkConfiguration(uclConfig, "", ConfigLevelRoot)
 }
 
 /* figure out what this element's name should be */
-func (config *Configuration) buildName(uclConfig *libucl.Object, parentRule string, depth ConfigLevelType) (string, error) {
+func (config *Configuration) buildName(uclConfig *goucl.Node, parentRule string, depth ConfigLevelType) (string, error) {
 	if depth == ConfigLevelRoot {
 		return "default", nil
 	}
@@ -150,10 +145,25 @@ func (config *Configuration) buildName(uclConfig *libucl.Object, parentRule stri
 	return name, err
 }
 
+/* the first of the values a key holds
+ *
+ * A key written more than once forms an implicit array rather than replacing
+ * the earlier value, and hfm resolves one of those to the value written
+ * first.  The typed accessors refuse a key holding several values, so the
+ * choice has to be made here rather than falling out of the read.
+ */
+func firstValue(uclConfig *goucl.Node) *goucl.Node {
+	for v := range uclConfig.Values() {
+		return v
+	}
+
+	return uclConfig
+}
+
 /* recursively walk the ucl configuration, populating an hfm Configuration
  * instance
  */
-func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentRule string, depth ConfigLevelType) error {
+func (config *Configuration) walkConfiguration(uclConfig *goucl.Node, parentRule string, depth ConfigLevelType) error {
 
 	if depth == ConfigLevelRoot {
 		config.ruleFinds = make(map[string]*RuleFound)
@@ -169,7 +179,7 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 	var nextDepth ConfigLevelType
 
 	/* all actual rules have a test, defaults do not */
-	isRule := (uclConfig.Get("test") != nil)
+	_, isRule := uclConfig.Get("test")
 
 	switch depth {
 	case ConfigLevelRoot:
@@ -193,14 +203,11 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 		config.ruleFinds[name] = &ruleFound
 	}
 
-	i := uclConfig.Iterate(true)
-	defer i.Close()
+	for key, value := range uclConfig.All() {
+		field := strings.ToLower(key)
+		c := firstValue(value)
 
-	for c := i.Next(); c != nil; c = i.Next() {
-		defer c.Close()
-		field := strings.ToLower(c.Key())
-
-		if c.Type() == libucl.ObjectTypeObject {
+		if c.Kind() == goucl.KindObject {
 			/* if we are a rule, we stop parsing children */
 			if depth != ConfigLevelRule || !isRule {
 				config.walkConfiguration(c, name, nextDepth)
@@ -213,11 +220,12 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 
 		switch field {
 		case "status":
-			if c.Type() != libucl.ObjectTypeString {
-				return fmt.Errorf("%s: '%s' must be a string type, got type %v", name, field, c.Type())
+			s, ok := c.String("")
+			if !ok {
+				return fmt.Errorf("%s: '%s' must be a string type, got type %v", name, field, c.Kind())
 			}
 
-			switch strings.ToLower(c.ToString()) {
+			switch strings.ToLower(s) {
 			case "enabled":
 				rule.Status = RuleStatusEnabled
 			case "disabled":
@@ -232,12 +240,16 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 		case "start_delay", "interval", "interval_fail", "timeout_int", "timeout_kill":
 			tmp := time.Duration(0)
 			/* interval/duration fields */
-			switch c.Type() {
-			case libucl.ObjectTypeInt, libucl.ObjectTypeFloat, libucl.ObjectTypeTime:
-				tmp = time.Duration(c.ToFloat() * float64(time.Second))
+			switch c.Kind() {
+			case goucl.KindInt, goucl.KindFloat, goucl.KindTime:
+				f, ok := c.Float("")
+				if !ok {
+					return fmt.Errorf("%s: '%s' must be a valid numeric type, got type %v", name, field, c.Kind())
+				}
+				tmp = time.Duration(f * float64(time.Second))
 
 			default:
-				return fmt.Errorf("%s: '%s' must be a valid numeric type, got type %v", name, field, c.Type())
+				return fmt.Errorf("%s: '%s' must be a valid numeric type, got type %v", name, field, c.Kind())
 			}
 
 			switch field {
@@ -259,11 +271,11 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 			}
 		case "test", "change_fail", "change_success":
 			/* command fields */
-			if c.Type() != libucl.ObjectTypeString {
-				return fmt.Errorf("%s: '%s' must be a string type, got type %v", name, field, c.Type())
+			tmp, ok := c.String("")
+			if !ok {
+				return fmt.Errorf("%s: '%s' must be a string type, got type %v", name, field, c.Kind())
 			}
 
-			tmp := c.ToString()
 			switch field {
 			case "test":
 				rule.Test = tmp
@@ -274,25 +286,21 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 			}
 		case "test_arguments", "change_fail_arguments", "change_success_arguments":
 			tmp := []string{}
-			if c.Type() == libucl.ObjectTypeString {
-				tmp = append(tmp, c.ToString())
-			} else if c.Type() == libucl.ObjectTypeArray {
+			if s, ok := c.String(""); ok {
+				tmp = append(tmp, s)
+			} else if c.Kind() == goucl.KindArray {
 
-				j := c.Iterate(true)
-				defer j.Close()
-
-				for arg := j.Next(); arg != nil; arg = j.Next() {
-					defer arg.Close()
-
-					if arg.Type() != libucl.ObjectTypeString {
-						return fmt.Errorf("%s: '%s' must contain only string elements, got type %v", name, field, arg.Type())
+				for arg := range c.Elements() {
+					s, ok := arg.String("")
+					if !ok {
+						return fmt.Errorf("%s: '%s' must contain only string elements, got type %v", name, field, arg.Kind())
 					}
 
-					tmp = append(tmp, arg.ToString())
+					tmp = append(tmp, s)
 				}
 
 			} else {
-				return fmt.Errorf("%s: '%s' must be a string or an array of strings, got type %v", name, field, c.Type())
+				return fmt.Errorf("%s: '%s' must be a string or an array of strings, got type %v", name, field, c.Kind())
 			}
 
 			switch field {
@@ -304,11 +312,14 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 				rule.ChangeSuccessArguments = tmp
 			}
 		case "runs":
-			if c.Type() != libucl.ObjectTypeInt {
-				return fmt.Errorf("%s: '%s' must be an integer type, got type %v", name, field, c.Type())
+			if c.Kind() != goucl.KindInt {
+				return fmt.Errorf("%s: '%s' must be an integer type, got type %v", name, field, c.Kind())
 			}
 
-			tmp := c.ToInt()
+			tmp, ok := c.Int("")
+			if !ok {
+				return fmt.Errorf("%s: '%s' must be an integer type, got type %v", name, field, c.Kind())
+			}
 			if tmp < 0 || tmp > 65535 {
 				return fmt.Errorf("%s: '%s' must be in 0..65535", name, field)
 			}
@@ -316,11 +327,14 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 			rule.Runs = uint16(tmp)
 			ruleFound.Runs = true
 		case "change_fail_debounce", "change_success_debounce":
-			if c.Type() != libucl.ObjectTypeInt {
-				return fmt.Errorf("%s: '%s' must be an integer type, got type %v", name, field, c.Type())
+			if c.Kind() != goucl.KindInt {
+				return fmt.Errorf("%s: '%s' must be an integer type, got type %v", name, field, c.Kind())
 			}
 
-			tmp := c.ToInt()
+			tmp, ok := c.Int("")
+			if !ok {
+				return fmt.Errorf("%s: '%s' must be an integer type, got type %v", name, field, c.Kind())
+			}
 
 			if tmp < 1 || tmp > 65535 {
 				return fmt.Errorf("%s: '%s' must be in 1..65535", name, field)
@@ -336,7 +350,7 @@ func (config *Configuration) walkConfiguration(uclConfig *libucl.Object, parentR
 			}
 
 		default:
-			return fmt.Errorf("%s: '%s' unrecognized property", name, c.Key())
+			return fmt.Errorf("%s: '%s' unrecognized property", name, key)
 		}
 	}
 

@@ -1,0 +1,4 @@
+github.com/op/go-logging v0.0.0-20151205051253-dfaf3dff9b63 h1:9kYrVB4NZ03Jb9JbIS4FrrIc5fqsA7ydUQcPmGdJnKE=
+github.com/op/go-logging v0.0.0-20151205051253-dfaf3dff9b63/go.mod h1:HzydrMdWErDVzsI23lYNej1Htcns9BCg93Dk0bBINWk=
+go.marcottesoftware.ca/goucl v0.1.0 h1:la8Z6wON2/koF4UqoQenG/TkyY+OurPEw2YwSif3unY=
+go.marcottesoftware.ca/goucl v0.1.0/go.mod h1:r7LFtgg7rmVNebpw5cAfLlD9tczYKAOAdpq5P13ovKU=
